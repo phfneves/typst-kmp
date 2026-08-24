@@ -24,22 +24,26 @@ val hostFamily: HostFamily = HostFamily.of(providers.systemProperty("os.name").g
 /** True when native artifacts come from `-Ptypst.prebuiltDir`, so cargo never runs. */
 val usePrebuiltNatives: Boolean = providers.gradleProperty("typst.prebuiltDir").isPresent
 
-/** Rust target matching the machine running this build, used for `jvmTest`. */
-val hostRustTarget: RustTarget = run {
-    val os = providers.systemProperty("os.name").get().lowercase()
-    val arch = providers.systemProperty("os.arch").get().lowercase()
-    val aarch64 = arch == "aarch64" || arch == "arm64"
-    // `-Ptypst.windowsAbi=gnu` builds the Windows JVM library with MinGW instead of MSVC, which
-    // is useful on a machine without Visual Studio. Releases always use MSVC.
-    val gnuOnWindows = providers.gradleProperty("typst.windowsAbi").orNull == "gnu"
-    when {
-        os.contains("win") ->
-            if (gnuOnWindows) RustTargets.windowsX64Gnu else RustTargets.windowsX64Msvc
-        os.contains("mac") || os.contains("darwin") ->
-            if (aarch64) RustTargets.macosArm64 else RustTargets.macosX64
-        else -> if (aarch64) RustTargets.linuxArm64 else RustTargets.linuxX64
+/**
+ * Rust target matching the machine running this build, used for `jvmTest`.
+ *
+ * Taken from the active toolchain rather than guessed from `os.name`, because on Windows the
+ * same OS and architecture serve both the MSVC and the GNU ABI and only the installed toolchain
+ * knows which one will link. Guessing meant every IDE-launched test needed a flag to correct it.
+ *
+ * The fallback covers a machine with no cargo at all, where the value is only ever used to name
+ * a task that will fail with an install hint anyway.
+ */
+val hostRustTarget: RustTarget = cargo.hostTriple()?.let(RustTargets::jvmHostForTriple)
+    ?: run {
+        val arch = providers.systemProperty("os.arch").get().lowercase()
+        val aarch64 = arch == "aarch64" || arch == "arm64"
+        when (hostFamily) {
+            HostFamily.WINDOWS -> RustTargets.windowsX64Msvc
+            HostFamily.MAC -> if (aarch64) RustTargets.macosArm64 else RustTargets.macosX64
+            else -> if (aarch64) RustTargets.linuxArm64 else RustTargets.linuxX64
+        }
     }
-}
 
 /** JNI shared library for the host, so tests can run against a freshly built Rust crate. */
 val hostJniBuild = cargo.build("typst-kmp-jni", hostRustTarget, RustArtifactKind.DYNAMIC_LIB)

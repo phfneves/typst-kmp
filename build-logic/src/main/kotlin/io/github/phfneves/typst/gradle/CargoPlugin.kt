@@ -107,6 +107,29 @@ abstract class CargoExtension @Inject constructor(private val project: Project) 
         return executable
     }
 
+    /**
+     * The triple the active Rust toolchain builds for by default, from `cargo -vV`.
+     *
+     * This is the only reliable answer to "which target can this machine actually build", and it
+     * is not derivable from `os.name`: on Windows the same OS and architecture serve both the
+     * MSVC and the GNU ABI, and which one works depends on the installed toolchain, not the
+     * machine. Returns `null` when cargo cannot be run, leaving the caller to guess.
+     */
+    fun hostTriple(): String? {
+        val execution = project.providers.exec {
+            commandLine(cargoExecutable.get(), "-vV")
+            isIgnoreExitValue = true
+        }
+        val exitValue = runCatching { execution.result.get().exitValue }.getOrNull()
+        if (exitValue != 0) return null
+        val output = runCatching { execution.standardOutput.asText.get() }.getOrNull() ?: return null
+        return output.lineSequence()
+            .firstOrNull { it.startsWith("host:") }
+            ?.substringAfter("host:")
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
     fun build(
         crate: String,
         target: RustTarget,

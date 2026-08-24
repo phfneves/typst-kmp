@@ -132,7 +132,8 @@ object RustTargets {
      *
      * The JVM loads either ABI happily, so this is a way to build on a machine that has MinGW-w64
      * — for instance the one Kotlin/Native already ships — but no Visual Studio. Select it with
-     * `-Ptypst.windowsAbi=gnu`. Released artifacts use MSVC.
+     * Selected automatically when the active Rust toolchain's host is the GNU one; see
+     * `CargoExtension.hostTriple`. Released artifacts are built on CI, whose toolchain is MSVC.
      */
     val windowsX64Gnu = RustTarget("x86_64-pc-windows-gnu", jvmPlatformId = "windows-x86_64")
 
@@ -158,4 +159,13 @@ object RustTargets {
     val android: List<RustTarget> = listOf(androidArm64, androidArm32, androidX64)
 
     fun byKonanTarget(name: String): RustTarget? = native.firstOrNull { it.konanTarget == name }
+
+    /**
+     * Every target that can host the JVM library, including the GNU-ABI Windows alternative that
+     * [jvm] deliberately leaves out of released artifacts.
+     */
+    private val jvmHosts: List<RustTarget> = jvm + windowsX64Gnu
+
+    /** Resolves the triple reported by `cargo -vV` to the target that builds the JVM library. */
+    fun jvmHostForTriple(triple: String): RustTarget? = jvmHosts.firstOrNull { it.triple == triple }
 }

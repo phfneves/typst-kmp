@@ -159,7 +159,6 @@ Useful properties:
 | `-Ptypst.cargoProfile=dev` | build the Rust crates unoptimised (much faster, much slower output) |
 | `-Ptypst.skipCargo=true` | do not build any Rust at all — type-checks the Kotlin sources on a machine without a toolchain |
 | `-Ptypst.prebuiltDir=<dir>` | use native artifacts from `<dir>/<triple>/`, as the CI publish job does |
-| `-Ptypst.windowsAbi=gnu` | build the Windows **JVM** library with MinGW instead of MSVC |
 | `-Ptypst.androidAbis=x86_64` | build only these Android ABIs instead of all three |
 | `-Ptypst.cargo=<path>` | use a specific cargo binary instead of the one that is found |
 
@@ -175,21 +174,24 @@ attempted, so an IDE sync on Windows does not try to build an Apple static libra
 ### A note on Windows ABIs
 
 `mingwX64` always maps to the **GNU** ABI (`x86_64-pc-windows-gnu`), because that is what
-Kotlin/Native links with. The JVM library normally uses MSVC, which needs the Visual Studio Build
-Tools with the C++ workload.
+Kotlin/Native links with.
 
-If you do not have those, `-Ptypst.windowsAbi=gnu` builds the JVM library with MinGW too — the JVM
-loads either ABI happily. Kotlin/Native already ships a suitable MinGW-w64 under
-`~/.konan/dependencies/msys2-mingw-w64-x86_64-*/bin`; put it on `PATH` and use a GNU-host Rust
-toolchain:
+The JVM library can use either ABI — the JVM loads both happily — so which one gets built is
+decided by whichever the active Rust toolchain hosts, read from `cargo -vV`. That is the only
+reliable signal: `os.name` cannot distinguish them, and guessing MSVC breaks every build on a
+machine without the Visual Studio Build Tools.
+
+If you would rather not install those, Kotlin/Native already ships a usable MinGW-w64 under
+`~/.konan/dependencies/msys2-mingw-w64-x86_64-*/bin`. Put it on `PATH` and make the GNU toolchain
+the default; nothing else needs configuring:
 
 ```bash
 rustup toolchain install stable-x86_64-pc-windows-gnu
-export RUSTUP_TOOLCHAIN=stable-x86_64-pc-windows-gnu
-./gradlew :typst:jvmTest -Ptypst.windowsAbi=gnu
+rustup default stable-x86_64-pc-windows-gnu
+./gradlew :typst:jvmTest
 ```
 
-Released Windows artifacts are built with MSVC on CI.
+Released Windows artifacts are built on CI, whose toolchain hosts MSVC.
 
 ## Module layout
 
