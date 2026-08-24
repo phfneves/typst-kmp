@@ -2,6 +2,7 @@
 agp = "9.1.0"
 android-compileSdk = "37"
 android-minSdk = "24"
+android-ndk = "27.2.12479018"
 kotlin = "2.4.10"
 coroutines = "1.10.2"
 serialization = "1.9.0"

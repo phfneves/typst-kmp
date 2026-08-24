@@ -20,6 +20,7 @@ plugins {
 android {
     namespace = "io.github.phfneves.typst.nativelib"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
+    ndkVersion = libs.versions.android.ndk.get()
 
     defaultConfig {
         minSdk = libs.versions.android.minSdk.get().toInt()
@@ -39,8 +40,23 @@ android {
     }
 }
 
+/*
+ * Where cargo-ndk finds the NDK.
+ *
+ * An NDK already exported by the environment wins — that is the case on CI runners, whose image
+ * ships one that need not match `ndkVersion`. Otherwise fall back to the NDK that AGP resolves
+ * under the SDK, so a local build works with nothing exported by hand.
+ *
+ * `orElse` keeps the fallback lazy: AGP's provider throws when no NDK is installed, and it is
+ * never resolved while an environment variable is present.
+ */
+val ndkPath = providers.environmentVariable("ANDROID_NDK_HOME")
+    .orElse(providers.environmentVariable("ANDROID_NDK_ROOT"))
+    .orElse(androidComponents.sdkComponents.ndkDirectory.map { it.asFile.absolutePath })
+
 cargo {
     androidMinSdk = libs.versions.android.minSdk.get().toInt()
+    environment.put("ANDROID_NDK_HOME", ndkPath)
 }
 
 // Register the cargo builds up front; registering tasks from inside another task's configuration

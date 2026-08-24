@@ -96,21 +96,30 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
-      - run: cargo install cargo-ndk --locked
+      # Pinned to the major version: cargo-ndk 4 renamed the API-level flag to -P and stopped
+      # tolerating a --target passed through to cargo. A silent CLI change breaks the build.
+      - run: cargo install cargo-ndk --locked --version '^4'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
-      # The common tests cannot run as `androidHostTest`: the Android loader calls
+      # Only the Android target: `:typst:assemble` would also build the Linux Kotlin/Native
+      # targets, whose Rust triples this job does not install.
+      #
+      # The common tests cannot run as `androidHostTest` either: the Android loader calls
       # System.loadLibrary, which a plain JVM cannot satisfy. Coverage for Android comes from the
-      # instrumented device test instead; here we only prove the .so lands in the AAR.
+      # instrumented device test; here we only prove the libraries land in the AAR.
       - name: Assemble
-        run: ./gradlew :typst-android-native:assemble :typst:assemble
-      - name: Verify the AAR carries every ABI
+        run: ./gradlew :typst-android-native:assembleRelease :typst:assembleAndroidMain
+      - name: Verify the AAR carries every ABI, with the JNI entry points exported
         run: |
-          aar=$(find typst-android-native/build/outputs/aar -name '*.aar' | head -1)
+          aar=typst-android-native/build/outputs/aar/typst-android-native-release.aar
+          unzip -o -q "$aar" 'jni/*' -d aar-check
           for abi in arm64-v8a armeabi-v7a x86_64; do
-            unzip -l "$aar" | grep -q "jni/$abi/libtypst_kmp_jni.so" \
-              || { echo "missing $abi in $aar"; exit 1; }
+            so="aar-check/jni/$abi/libtypst_kmp_jni.so"
+            [ -f "$so" ] || { echo "missing $abi in $aar"; exit 1; }
+            grep -aq 'Java_io_github_phfneves_typst_internal_TypstNative_compile' "$so" \
+              || { echo "$abi library does not export the JNI entry points"; exit 1; }
+            echo "ok: $abi ($(du -h "$so" | cut -f1))"
           done

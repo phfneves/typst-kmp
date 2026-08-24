@@ -5,8 +5,9 @@ binary to install, no subprocess, no server round-trip. The compiler is embedded
 process on Android, the JVM, iOS, macOS, Linux and Windows.
 
 > **Status: work in progress.** Verified end to end on the JVM (JNI) and Kotlin/Native (cinterop)
-> — 15 Rust tests plus the same 9 Kotlin tests green on both. Android, Apple and Linux targets are
-> configured but have not been run yet, and nothing has been published.
+> — 15 Rust tests plus the same 9 Kotlin tests green on both. Android builds all three ABIs into
+> the AAR with the JNI entry points exported, but has not yet been run on a device. Apple and
+> Linux targets are configured and unbuilt, and nothing has been published.
 
 ```kotlin
 Typst.create().use { typst ->
@@ -102,8 +103,16 @@ You need the [Rust toolchain](https://rustup.rs) on `PATH`, plus the targets you
 ```bash
 rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios   # iOS
 rustup target add x86_64-pc-windows-gnu                                      # mingwX64
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
 cargo install cargo-ndk                                                      # Android
 ```
+
+Android additionally needs the NDK. The build looks for it in this order: `ANDROID_NDK_HOME`,
+then `ANDROID_NDK_ROOT`, then whatever AGP resolves under the SDK for the `android-ndk` version in
+the catalogue. CI runners already export one, so nothing has to be configured there. Locally,
+install the pinned version through the SDK manager, or unzip the standalone NDK into
+`$ANDROID_HOME/ndk/<version>/` — the directory name must match `Pkg.Revision` in the NDK's
+`source.properties`.
 
 Then:
 
@@ -161,11 +170,16 @@ points at a separate `com.android.library` module as the way out.
 
 ## Known trade-offs
 
-* **Binary size.** The native library is roughly 15–30 MB per platform, about 10 MB of which is the
-  embedded font bundle. Build the Rust crates with `--no-default-features` to drop
-  `embed-fonts` and supply fonts through `TypstConfig.fonts` instead.
+* **Binary size.** Measured on release builds: 39.8 MB (arm64-v8a), 33.8 MB (armeabi-v7a),
+  43.3 MB (x86_64) and 41.4 MB for the Windows JVM library. Roughly 10 MB of that is the embedded
+  font bundle — build the Rust crates with `--no-default-features` to drop `embed-fonts` and
+  supply fonts through `TypstConfig.fonts` instead. Android apps should rely on ABI splits or app
+  bundles so a device only downloads its own architecture.
 * **The JVM jar bundles every platform**, so it is large. Splitting it into classifier jars is a
   planned follow-up.
+* **Debug Android builds carry release-optimised native libraries.** The cargo profile follows
+  `typst.cargoProfile`, not the Android variant, because an unoptimised Typst is too slow to be
+  useful. Pass `-Ptypst.cargoProfile=dev` when you actually want to debug the Rust side.
 * **Android tests.** The common test suite cannot run as `androidHostTest`, because the Android
   loader calls `System.loadLibrary` and a plain JVM cannot satisfy it. Android is covered by
   instrumented device tests.

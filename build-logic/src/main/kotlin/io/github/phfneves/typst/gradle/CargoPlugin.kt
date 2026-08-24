@@ -5,6 +5,7 @@ import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.MapProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.TaskProvider
 import javax.inject.Inject
@@ -37,6 +38,14 @@ abstract class CargoExtension @Inject constructor(private val project: Project) 
     abstract val noDefaultFeatures: Property<Boolean>
 
     abstract val androidMinSdk: Property<Int>
+
+    /**
+     * Extra environment variables for every cargo invocation.
+     *
+     * Android builds use this to hand `cargo-ndk` the NDK that AGP resolved, so a local build
+     * does not depend on `ANDROID_NDK_HOME` being set by hand.
+     */
+    abstract val environment: MapProperty<String, String>
 
     /** `-Ptypst.skipCargo=true` — type-check Kotlin without a Rust toolchain. */
     abstract val skipCargo: Property<Boolean>
@@ -83,6 +92,7 @@ abstract class CargoExtension @Inject constructor(private val project: Project) 
         val configuredAndroidMinSdk = androidMinSdk
         val configuredPrebuiltDir = prebuiltDir.orNull
         val configuredSkipCargo = skipCargo
+        val configuredEnvironment = environment
         val cargoTarget = project.rootProject.layout.buildDirectory.dir("cargo")
         val output = project.layout.buildDirectory.dir("rust/${target.triple}/$crate")
 
@@ -97,7 +107,7 @@ abstract class CargoExtension @Inject constructor(private val project: Project) 
             artifactKind.set(kind)
             features.set(configuredFeatures)
             noDefaultFeatures.set(configuredNoDefaultFeatures)
-            extraEnvironment.set(emptyMap<String, String>())
+            extraEnvironment.set(configuredEnvironment)
 
             if (target.androidAbi != null) {
                 androidAbi.set(target.androidAbi)

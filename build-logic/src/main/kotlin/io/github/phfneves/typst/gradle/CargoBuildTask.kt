@@ -150,10 +150,14 @@ abstract class CargoBuildTask : DefaultTask() {
         val args = mutableListOf<String>()
         val abi = androidAbi.orNull
         if (abi != null) {
+            // cargo-ndk selects the Rust target itself from the ABI, so `--target` must not be
+            // passed as well. Note the API level flag is `-P`, uppercase, since cargo-ndk 4.
             args += listOf("ndk", "-t", abi)
-            androidMinSdk.orNull?.let { args += listOf("-p", it.toString()) }
+            androidMinSdk.orNull?.let { args += listOf("-P", it.toString()) }
+            args += listOf("build", "--package", crate)
+        } else {
+            args += listOf("build", "--package", crate, "--target", target)
         }
-        args += listOf("build", "--package", crate, "--target", target)
         if (profile.get() == "release") args += "--release"
         if (noDefaultFeatures.get()) args += "--no-default-features"
         features.get().takeIf { it.isNotEmpty() }?.let { args += listOf("--features", it.joinToString(",")) }
