@@ -8,6 +8,7 @@ import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.MapProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.TaskProvider
+import java.io.File
 import javax.inject.Inject
 
 /**
@@ -50,6 +51,16 @@ abstract class CargoExtension @Inject constructor(private val project: Project) 
     /** `-Ptypst.skipCargo=true` — type-check Kotlin without a Rust toolchain. */
     abstract val skipCargo: Property<Boolean>
 
+    /**
+     * The cargo executable.
+     *
+     * Resolved rather than assumed, because a Gradle daemon does not necessarily inherit the
+     * PATH of the shell that installed rustup — an IDE launched before the install is the common
+     * case, and it fails with a bare "cannot find the file specified". Override with
+     * `-Ptypst.cargo=/path/to/cargo`.
+     */
+    abstract val cargoExecutable: Property<String>
+
     init {
         workspaceDir.convention(project.rootProject.layout.projectDirectory.dir("rust"))
         profile.convention(project.providers.gradleProperty("typst.cargoProfile").orElse("release"))
@@ -60,6 +71,40 @@ abstract class CargoExtension @Inject constructor(private val project: Project) 
         project.providers.gradleProperty("typst.prebuiltDir").orNull?.let {
             prebuiltDir.set(project.layout.projectDirectory.dir(it))
         }
+        cargoExecutable.convention(
+            project.providers.gradleProperty("typst.cargo").orElse(
+                project.provider { findCargo(project) },
+            ),
+        )
+    }
+
+    /**
+     * Looks for cargo on PATH, then in rustup's default install location.
+     *
+     * Falls back to the bare name so the task still runs — and still produces its own install
+     * hint — on a machine with no toolchain at all.
+     */
+    private fun findCargo(project: Project): String {
+        val windows = HostFamily.of(System.getProperty("os.name")) == HostFamily.WINDOWS
+        val executable = if (windows) "cargo.exe" else "cargo"
+
+        val onPath = System.getenv("PATH")
+            ?.split(File.pathSeparator)
+            ?.asSequence()
+            ?.filter { it.isNotBlank() }
+            ?.map { File(it, executable) }
+            ?.firstOrNull { it.isFile }
+        if (onPath != null) return onPath.absolutePath
+
+        val cargoHome = System.getenv("CARGO_HOME")?.let(::File)
+            ?: File(System.getProperty("user.home"), ".cargo")
+        val inCargoHome = File(cargoHome, "bin/$executable")
+        if (inCargoHome.isFile) {
+            project.logger.info("Using cargo from ${inCargoHome.absolutePath} (not on PATH).")
+            return inCargoHome.absolutePath
+        }
+
+        return executable
     }
 
     fun build(
@@ -93,6 +138,7 @@ abstract class CargoExtension @Inject constructor(private val project: Project) 
         val configuredPrebuiltDir = prebuiltDir.orNull
         val configuredSkipCargo = skipCargo
         val configuredEnvironment = environment
+        val configuredCargo = cargoExecutable
         val cargoTarget = project.rootProject.layout.buildDirectory.dir("cargo")
         val output = project.layout.buildDirectory.dir("rust/${target.triple}/$crate")
 
@@ -108,6 +154,7 @@ abstract class CargoExtension @Inject constructor(private val project: Project) 
             features.set(configuredFeatures)
             noDefaultFeatures.set(configuredNoDefaultFeatures)
             extraEnvironment.set(configuredEnvironment)
+            cargoExecutable.set(configuredCargo)
 
             if (target.androidAbi != null) {
                 androidAbi.set(target.androidAbi)

@@ -1,4 +1,5 @@
 import io.github.phfneves.typst.gradle.GenerateTypstFixturesTask
+import io.github.phfneves.typst.gradle.HostFamily
 import io.github.phfneves.typst.gradle.RustArtifactKind
 import io.github.phfneves.typst.gradle.RustTarget
 import io.github.phfneves.typst.gradle.RustTargets
@@ -16,6 +17,12 @@ plugins {
 cargo {
     androidMinSdk = libs.versions.android.minSdk.get().toInt()
 }
+
+/** The machine running this build, used to skip targets it could never produce. */
+val hostFamily: HostFamily = HostFamily.of(providers.systemProperty("os.name").get())
+
+/** True when native artifacts come from `-Ptypst.prebuiltDir`, so cargo never runs. */
+val usePrebuiltNatives: Boolean = providers.gradleProperty("typst.prebuiltDir").isPresent
 
 /** Rust target matching the machine running this build, used for `jvmTest`. */
 val hostRustTarget: RustTarget = run {
@@ -111,6 +118,18 @@ kotlin {
     targets.withType<KotlinNativeTarget>().configureEach {
         val descriptor = RustTargets.byKonanTarget(name)
             ?: error("No Rust target mapped for the Kotlin/Native target '$name'.")
+
+        // Skip targets whose Rust artifact this machine could not produce — otherwise an IDE sync
+        // tries to build an Apple static library on Windows and fails the whole sync.
+        //
+        // The host only limits *cargo*, not Kotlin/Native, so this must not apply when prebuilt
+        // artifacts are supplied: the publish job assembles every target on one macOS runner and
+        // needs all of them wired up.
+        if (!descriptor.isBuildableOn(hostFamily) && !usePrebuiltNatives) {
+            logger.info("Skipping the Rust build for '$name': not buildable on a $hostFamily host.")
+            return@configureEach
+        }
+
         val cargoTask = cargo.build("typst-kmp-cabi", descriptor, RustArtifactKind.STATIC_LIB)
         val headerDir = layout.projectDirectory.dir("../rust/typst-kmp-cabi/include")
         val libraryDir = cargoTask.flatMap { it.outputDir }
@@ -143,9 +162,7 @@ kotlin {
  * Registered up front: registering tasks from inside another task's configuration action is not
  * allowed.
  */
-val jvmNativeTargets =
-    if (providers.gradleProperty("typst.prebuiltDir").isPresent) RustTargets.jvm
-    else listOf(hostRustTarget)
+val jvmNativeTargets = if (usePrebuiltNatives) RustTargets.jvm else listOf(hostRustTarget)
 
 val jvmNativeBuilds = jvmNativeTargets.mapNotNull { target ->
     target.jvmPlatformId?.let { platformId ->

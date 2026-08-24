@@ -69,6 +69,10 @@ abstract class CargoBuildTask : DefaultTask() {
     @get:Input
     abstract val extraEnvironment: MapProperty<String, String>
 
+    /** Absolute path to cargo, resolved by the plugin rather than taken from PATH. */
+    @get:Input
+    abstract val cargoExecutable: Property<String>
+
     /** Every source file cargo depends on. Deliberately excludes `target/`. */
     @get:InputFiles
     @get:PathSensitive(PathSensitivity.RELATIVE)
@@ -166,7 +170,7 @@ abstract class CargoBuildTask : DefaultTask() {
         val stderr = ByteArrayOutputStream()
         val result = try {
             execOps.exec {
-                commandLine(listOf("cargo") + args)
+                commandLine(listOf(cargoExecutable.get()) + args)
                 workingDir = workspaceDir.get().asFile
                 environment.putAll(extraEnvironment.get())
                 errorOutput = stderr
@@ -174,8 +178,8 @@ abstract class CargoBuildTask : DefaultTask() {
             }
         } catch (cause: Exception) {
             throw GradleException(
-                "Could not run 'cargo'. Install the Rust toolchain from https://rustup.rs and make " +
-                    "sure cargo is on PATH." +
+                "Could not run '${cargoExecutable.get()}'. Install the Rust toolchain from https://rustup.rs " +
+                    "and make sure cargo is on PATH, or point at it with -Ptypst.cargo=<path>." +
                     (if (abi != null) " Android builds also need 'cargo install cargo-ndk'." else "") +
                     " To type-check the Kotlin sources without a Rust toolchain, build with " +
                     "-Ptypst.skipCargo=true.",
@@ -186,7 +190,7 @@ abstract class CargoBuildTask : DefaultTask() {
         System.err.flush()
         if (result.exitValue != 0) {
             throw GradleException(
-                "cargo ${args.joinToString(" ")} failed with exit code ${result.exitValue}. " +
+                "${cargoExecutable.get()} ${args.joinToString(" ")} failed with exit code ${result.exitValue}. " +
                     "Make sure the '$target' target is installed (rustup target add $target).",
             )
         }

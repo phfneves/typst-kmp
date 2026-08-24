@@ -160,6 +160,17 @@ Useful properties:
 | `-Ptypst.skipCargo=true` | do not build any Rust at all — type-checks the Kotlin sources on a machine without a toolchain |
 | `-Ptypst.prebuiltDir=<dir>` | use native artifacts from `<dir>/<triple>/`, as the CI publish job does |
 | `-Ptypst.windowsAbi=gnu` | build the Windows **JVM** library with MinGW instead of MSVC |
+| `-Ptypst.androidAbis=x86_64` | build only these Android ABIs instead of all three |
+| `-Ptypst.cargo=<path>` | use a specific cargo binary instead of the one that is found |
+
+Cargo is located automatically: first on `PATH`, then under `CARGO_HOME` (or `~/.cargo`). That
+matters for IDE syncs — a Gradle daemon started before rustup was installed does not inherit the
+shell's `PATH`, and the failure it produces otherwise is an opaque "cannot find the file
+specified".
+
+Targets whose Rust artifact the current machine could not produce are skipped rather than
+attempted, so an IDE sync on Windows does not try to build an Apple static library. Supplying
+`-Ptypst.prebuiltDir` lifts that restriction, since nothing needs compiling.
 
 ### A note on Windows ABIs
 

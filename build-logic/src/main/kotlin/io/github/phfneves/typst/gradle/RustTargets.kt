@@ -54,9 +54,40 @@ data class RustTarget(
             isWindows -> HostFamily.WINDOWS
             else -> HostFamily.LINUX
         }
+
+    /**
+     * Whether [host] can build this target at all.
+     *
+     * Used to skip wiring cargo for targets this machine could never produce. Kotlin/Native
+     * already refuses to cross-compile a klib that carries a cinterop, so leaving the cargo task
+     * wired up only means an IDE sync tries to build an Apple static library on Windows and
+     * fails.
+     */
+    fun isBuildableOn(host: HostFamily): Boolean =
+        requiredHostFamily == HostFamily.ANY || requiredHostFamily == host
 }
 
-enum class HostFamily { MAC, LINUX, WINDOWS, ANY }
+enum class HostFamily {
+    MAC,
+    LINUX,
+    WINDOWS,
+
+    /** Buildable anywhere, given the right toolchain — Android via the NDK. */
+    ANY,
+    ;
+
+    companion object {
+        /** Classifies the machine running the build from its `os.name`. */
+        fun of(osName: String): HostFamily {
+            val name = osName.lowercase()
+            return when {
+                name.contains("win") -> WINDOWS
+                name.contains("mac") || name.contains("darwin") -> MAC
+                else -> LINUX
+            }
+        }
+    }
+}
 
 /**
  * Every target we ship.
