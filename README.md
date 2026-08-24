@@ -4,10 +4,10 @@ The [Typst](https://typst.app) typesetting compiler as a Kotlin Multiplatform li
 binary to install, no subprocess, no server round-trip. The compiler is embedded and runs in
 process on Android, the JVM, iOS, macOS, Linux and Windows.
 
-> **Status: work in progress.** Verified end to end on the JVM (JNI) and Kotlin/Native (cinterop)
-> — 15 Rust tests plus the same 9 Kotlin tests green on both. Android builds all three ABIs into
-> the AAR with the JNI entry points exported, but has not yet been run on a device. Apple and
-> Linux targets are configured and unbuilt, and nothing has been published.
+> **Status: work in progress.** The same 13-test `commonTest` suite runs green on the JVM (JNI),
+> on Kotlin/Native (cinterop) and on an Android emulator (instrumented), on top of 15 Rust tests.
+> Each run compiles a real multi-page document and writes the PDF out for inspection. Apple and
+> Linux targets are configured but have only ever been built by CI, and nothing has been published.
 
 ```kotlin
 Typst.create().use { typst ->
@@ -118,9 +118,37 @@ Then:
 
 ```bash
 cd rust && cargo test          # the Rust core, no Gradle involved
-./gradlew :typst:jvmTest       # first end-to-end PDF
-./gradlew :typst:linuxX64Test  # cinterop + static linking
+./gradlew :typst:jvmTest       # JNI
+./gradlew :typst:linuxX64Test  # cinterop + static linking (mingwX64Test on Windows)
+
+# Instrumented, against a running emulator or device. The ABI filter matters: without it every
+# ABI is built, and only the device's own is ever loaded.
+./gradlew :typst:connectedAndroidDeviceTest -Ptypst.androidAbis=x86_64
 ```
+
+## Tests
+
+Every platform runs the **same** `commonTest` suite — there are no per-platform test bodies, only
+the `expect`/`actual` needed to say where artifacts go. The end-to-end case compiles
+`src/commonTest/typst/report.typ`, a real two-page document with an import, maths, a table and
+non-ASCII text, and checks the PDF, one SVG and one PNG per page, and a document query.
+
+It then writes the PDF where you can open it:
+
+| Suite | PDF lands in |
+| --- | --- |
+| `jvmTest`, `linuxX64Test`, `mingwX64Test`, … | `typst/build/test-artifacts/` |
+| `connectedAndroidDeviceTest` | `typst/build/outputs/connected_android_test_additional_output/` |
+
+The Android path goes through AGP's `additionalTestOutputDir` runner argument, because the test
+app is uninstalled the moment the run ends and its own directories go with it.
+
+The fixtures stay real `.typ` files in the repository; `generateTypstFixtures` turns them into
+Kotlin constants so the suite needs no file access at all — which is what lets it run unchanged
+inside an Android instrumentation runner.
+
+Android has no host-test suite on purpose: `commonTest` would flow into it and every one of those
+tests calls `System.loadLibrary`, which a plain JVM cannot satisfy.
 
 Gradle drives cargo automatically; `build-logic` maps each Kotlin target to its Rust triple.
 

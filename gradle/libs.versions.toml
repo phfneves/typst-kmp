@@ -8,6 +8,7 @@ coroutines = "1.10.2"
 serialization = "1.9.0"
 kotlinx-io = "0.8.0"
 ktor = "3.3.0"
+androidx-test = "1.7.0"
 vanniktech-maven-publish = "0.36.0"
 
 [libraries]
@@ -17,6 +18,8 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 kotlinx-io-core = { module = "org.jetbrains.kotlinx:kotlinx-io-core", version.ref = "kotlinx-io" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test" }
+androidx-test-core = { module = "androidx.test:core", version.ref = "androidx-test" }
 
 # Referenced by build-logic so it can apply these plugins to subprojects.
 android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }

@@ -1,3 +1,4 @@
+import io.github.phfneves.typst.gradle.GenerateTypstFixturesTask
 import io.github.phfneves.typst.gradle.RustArtifactKind
 import io.github.phfneves.typst.gradle.RustTarget
 import io.github.phfneves.typst.gradle.RustTargets
@@ -47,13 +48,18 @@ kotlin {
 
     jvm()
 
-    androidLibrary {
+    android {
         namespace = "io.github.phfneves.typst"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
 
-        withHostTestBuilder {}.configure {}
-        withDeviceTestBuilder { sourceSetTreeName = "test" }
+        // No host test builder on purpose. `commonTest` would flow into it, and every one of
+        // those tests loads the native library through System.loadLibrary, which a plain JVM
+        // cannot satisfy. Android is covered by the instrumented device tests instead, which run
+        // the identical `commonTest` suite on a real ABI.
+        withDeviceTestBuilder { sourceSetTreeName = "test" }.configure {
+            instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        }
 
         compilerOptions {
             jvmTarget = JvmTarget.JVM_11
@@ -73,7 +79,7 @@ kotlin {
 
     sourceSets {
         // JNI is shared verbatim between the JVM and Android; only the library *loader* differs.
-        val jvmCommonMain by creating {
+        val jvmCommonMain = create("jvmCommonMain") {
             dependsOn(commonMain.get())
         }
         jvmMain.get().dependsOn(jvmCommonMain)
@@ -86,11 +92,18 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.kotlinx.serialization.json)
+            // Writing the end-to-end PDF out is shared code; only the directory is per platform.
+            implementation(libs.kotlinx.io.core)
         }
         androidMain.dependencies {
             // Carries libtypst_kmp_jni.so: the AGP KMP library plugin cannot package jniLibs
             // itself, so a plain com.android.library module ships them.
             api(project(":typst-android-native"))
+        }
+        getByName("androidDeviceTest").dependencies {
+            implementation(libs.androidx.test.runner)
+            implementation(libs.androidx.test.core)
         }
     }
 
@@ -148,16 +161,43 @@ tasks.named<ProcessResources>("jvmProcessResources") {
     }
 }
 
+// --- Test fixtures and their inspectable output ------------------------------------------------
+
+/**
+ * Where every platform's suite drops the PDF it compiled, so it can actually be opened.
+ * One directory per platform, since several suites may run in the same build.
+ */
+val testArtifactDir: Provider<Directory> = layout.buildDirectory.dir("test-artifacts")
+
+val generateTypstFixtures = tasks.register<GenerateTypstFixturesTask>("generateTypstFixtures") {
+    fixtureDir.set(layout.projectDirectory.dir("src/commonTest/typst"))
+    packageName.set("io.github.phfneves.typst.fixtures")
+    outputDir.set(layout.buildDirectory.dir("generated/typstFixtures/kotlin"))
+}
+
+kotlin.sourceSets.commonTest.get().kotlin.srcDir(generateTypstFixtures)
+
 tasks.named<Test>("jvmTest") {
     dependsOn(hostJniBuild)
     val libraryFile = hostJniBuild.map { task ->
         task.outputDir.get().asFile.resolve(hostRustTarget.dynamicLibFileName("typst-kmp-jni"))
     }
+    val artifacts = testArtifactDir
     jvmArgumentProviders.add(
         CommandLineArgumentProvider {
-            listOf("-Dtypst.kmp.library.path=${libraryFile.get().absolutePath}")
+            listOf(
+                "-Dtypst.kmp.library.path=${libraryFile.get().absolutePath}",
+                "-Dtypst.test.output=${artifacts.get().asFile.absolutePath}",
+            )
         },
     )
+    testLogging { showStandardStreams = true }
+}
+
+// Kotlin/Native test binaries read the directory from the environment instead.
+tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
+    environment("TYPST_TEST_OUTPUT", testArtifactDir.get().asFile.absolutePath)
+    testLogging { showStandardStreams = true }
 }
 
 mavenPublishing {

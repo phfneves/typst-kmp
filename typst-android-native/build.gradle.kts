@@ -17,6 +17,27 @@ plugins {
  * depends on this AAR from `androidMain`.
  */
 
+/*
+ * Which ABIs to build.
+ *
+ * All three by default. `-Ptypst.androidAbis=x86_64` narrows it, which matters for the
+ * instrumented-test job: an emulator only ever loads its own ABI, and each extra one is a full
+ * rebuild of the Typst tree for another triple.
+ */
+val selectedAbis: List<String> =
+    providers.gradleProperty("typst.androidAbis").orNull
+        ?.split(',')
+        ?.map { it.trim() }
+        ?.filter { it.isNotEmpty() }
+        ?: RustTargets.android.mapNotNull { it.androidAbi }
+
+val selectedAndroidTargets = RustTargets.android.filter { it.androidAbi in selectedAbis }
+
+require(selectedAndroidTargets.isNotEmpty()) {
+    "typst.androidAbis=${selectedAbis.joinToString(",")} matched no known ABI. " +
+        "Known: ${RustTargets.android.mapNotNull { it.androidAbi }.joinToString(", ")}"
+}
+
 android {
     namespace = "io.github.phfneves.typst.nativelib"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
@@ -25,7 +46,7 @@ android {
     defaultConfig {
         minSdk = libs.versions.android.minSdk.get().toInt()
         ndk {
-            abiFilters += RustTargets.android.mapNotNull { it.androidAbi }
+            abiFilters += selectedAbis
         }
     }
 
@@ -61,7 +82,7 @@ cargo {
 
 // Register the cargo builds up front; registering tasks from inside another task's configuration
 // action is not safe.
-val androidBuilds = RustTargets.android.associate { target ->
+val androidBuilds = selectedAndroidTargets.associate { target ->
     requireNotNull(target.androidAbi) to
         cargo.build("typst-kmp-jni", target, RustArtifactKind.DYNAMIC_LIB)
 }
