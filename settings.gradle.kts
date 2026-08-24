@@ -1,4 +1,4 @@
-git pluginManagement {
+pluginManagement {
     repositories {
         google()
         mavenCentral()
@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "multiplatform-library-template"
+rootProject.name = "typst-kmp"
 include(":library")
