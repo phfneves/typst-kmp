@@ -1,25 +1,119 @@
 name: Publish
+
 on:
   release:
-    types: [released, prereleased]
+    types: [ released, prereleased ]
+  workflow_dispatch:
+
 jobs:
-  publish:
-    name: Release build and publish
-    runs-on: macOS-latest
+  # Each runner can only build the Rust targets its own toolchain supports, so the native
+  # artifacts are produced here and handed to a single publish job below. Without this split it
+  # would be impossible to publish every klib and every JVM platform from one machine.
+  natives:
+    name: Build ${{ matrix.triple }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  triple: x86_64-unknown-linux-gnu,   crate: both }
+          - { os: ubuntu-latest,  triple: aarch64-unknown-linux-gnu,  crate: both }
+          - { os: macos-latest,   triple: x86_64-apple-darwin,        crate: both }
+          - { os: macos-latest,   triple: aarch64-apple-darwin,       crate: both }
+          - { os: macos-latest,   triple: aarch64-apple-ios,          crate: cabi }
+          - { os: macos-latest,   triple: aarch64-apple-ios-sim,      crate: cabi }
+          - { os: macos-latest,   triple: x86_64-apple-ios,           crate: cabi }
+          - { os: windows-latest, triple: x86_64-pc-windows-msvc,     crate: jni }
+          - { os: windows-latest, triple: x86_64-pc-windows-gnu,      crate: cabi }
+          - { os: ubuntu-latest,  triple: aarch64-linux-android,      crate: android }
+          - { os: ubuntu-latest,  triple: armv7-linux-androideabi,    crate: android }
+          - { os: ubuntu-latest,  triple: x86_64-linux-android,       crate: android }
     steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          distribution: 'zulu'
-          java-version: 21
-      - name: Publish to MavenCentral
-        run: ./gradlew publishToMavenCentral --no-configuration-cache
+          targets: ${{ matrix.triple }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - name: Install cross linkers
+        if: matrix.triple == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+      - name: Install cargo-ndk
+        if: matrix.crate == 'android'
+        run: cargo install cargo-ndk --locked
+
+      - name: Build
+        shell: bash
+        working-directory: rust
+        run: |
+          case "${{ matrix.crate }}" in
+            both)    pkgs="typst-kmp-cabi typst-kmp-jni" ;;
+            cabi)    pkgs="typst-kmp-cabi" ;;
+            jni)     pkgs="typst-kmp-jni" ;;
+            android) pkgs="" ;;
+          esac
+          if [ "${{ matrix.crate }}" = "android" ]; then
+            cargo ndk -t "${{ matrix.triple }}" build --release --package typst-kmp-jni
+          else
+            for pkg in $pkgs; do
+              cargo build --release --package "$pkg" --target "${{ matrix.triple }}"
+            done
+          fi
+
+      - name: Stage artifacts
+        shell: bash
+        run: |
+          mkdir -p staged/${{ matrix.triple }}
+          find rust/target/${{ matrix.triple }}/release -maxdepth 1 \
+            \( -name 'libtypst_kmp_*.a'     -o -name 'typst_kmp_*.lib' \
+            -o -name 'libtypst_kmp_*.so'    -o -name 'libtypst_kmp_*.dylib' \
+            -o -name 'typst_kmp_*.dll' \) -exec cp {} staged/${{ matrix.triple }}/ \;
+          # The generated C header is host-independent; ship it once from the Linux build.
+          if [ "${{ matrix.triple }}" = "x86_64-unknown-linux-gnu" ]; then
+            mkdir -p staged/include
+            cp rust/typst-kmp-cabi/include/typst_kmp.h staged/include/
+          fi
+          ls -R staged
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.triple }}
+          path: staged
+          if-no-files-found: error
+
+  publish:
+    name: Publish to Maven Central
+    needs: natives
+    # Apple klibs can only be produced on a macOS host, even with prebuilt Rust archives.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: prebuilt-raw
+          pattern: native-*
+          merge-multiple: true
+      - name: Restore the generated header
+        run: |
+          mkdir -p rust/typst-kmp-cabi/include
+          cp prebuilt-raw/include/typst_kmp.h rust/typst-kmp-cabi/include/
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Publish
+        run: >
+          ./gradlew publishToMavenCentral
+          "-Ptypst.prebuiltDir=${{ github.workspace }}/prebuilt-raw"
+          --no-configuration-cache
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_KEY_ID }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_KEY_CONTENTS }}
-

@@ -1,19 +1,179 @@
-[![official project](http://jb.gg/badges/official.svg)](https://github.com/JetBrains#jetbrains-on-github)
+# typst-kmp
 
-# Multiplatform library template
+The [Typst](https://typst.app) typesetting compiler as a Kotlin Multiplatform library — no `typst`
+binary to install, no subprocess, no server round-trip. The compiler is embedded and runs in
+process on Android, the JVM, iOS, macOS, Linux and Windows.
 
-## What is it?
+> **Status: work in progress.** Verified end to end on the JVM (JNI) and Kotlin/Native (cinterop)
+> — 15 Rust tests plus the same 9 Kotlin tests green on both. Android, Apple and Linux targets are
+> configured but have not been run yet, and nothing has been published.
 
-This repository contains a simple library project, intended to demonstrate a [Kotlin Multiplatform](https://kotlinlang.org/docs/multiplatform.html) library that is deployable to [Maven Central](https://central.sonatype.com/).
+```kotlin
+Typst.create().use { typst ->
+    val result = typst.compile(
+        CompileRequest.of(
+            source = """
+                #set page(width: 10cm, height: auto)
+                = Olá, #sys.inputs.at("name")
+                Escrito com Typst.
+            """.trimIndent(),
+            inputs = mapOf("name" to "Pedro"),
+        ),
+    )
+    val pdf: ByteArray = result.getOrThrow().filterIsInstance<Output.Pdf>().single().bytes
+}
+```
 
-The library has only one function: generate the [Fibonacci sequence](https://en.wikipedia.org/wiki/Fibonacci_sequence) starting from platform-provided numbers. Also, it has a test for each platform just to be sure that tests run.
+## Why not just wrap `java-typst`?
 
-Note that no other actions or tools usually required for the library development are set up, such as [tracking of backwards compatibility](https://kotlinlang.org/docs/jvm-api-guidelines-backward-compatibility.html#tools-designed-to-enforce-backward-compatibility), explicit API mode, licensing, contribution guideline, code of conduct and others. You can find a guide for best practices for designing Kotlin libraries [here](https://kotlinlang.org/docs/api-guidelines-introduction.html).
+[`g0ddest/java-typst`](https://github.com/g0ddest/java-typst) solves the same problem for Java, and
+its key idea is reused here: the hard part is a **Rust crate exposing a plain C ABI**, not the
+bindings. What could not be reused is the consumption layer — it uses the Panama FFM API, which
+requires Java 25 and does not exist on Android.
 
-## Guide
+Two further design choices differ:
 
-Please find the detailed guide [here](https://www.jetbrains.com/help/kotlin-multiplatform-dev/multiplatform-publish-libraries.html).
+* **The Rust side performs no I/O at all** — no filesystem, no network, no clock. Everything the
+  document reads comes from an in-memory VFS the host fills in.
+* **No callbacks cross the FFI boundary.** When something is missing, the compiler reports it
+  structurally and Kotlin resolves it and retries.
 
-# Other resources
-* [Publishing via the Central Portal](https://central.sonatype.org/publish-ea/publish-ea-guide/)
-* [Gradle Maven Publish Plugin \- Publishing to Maven Central](https://vanniktech.github.io/gradle-maven-publish-plugin/central/)
+## Architecture
+
+```
+                       commonMain  — public API, JSON encoding, resolution loop
+                            │
+        ┌───────────────────┼───────────────────┐
+        │                   │                   │
+   jvmCommonMain        nativeMain          (jsMain/wasmJsMain — later)
+   JNI bindings         cinterop
+        │                   │                   │
+ typst-kmp-jni       typst-kmp-cabi       typst-kmp-wasm
+   (cdylib)        (staticlib + header)    (wasm-bindgen)
+        └───────────────────┼───────────────────┘
+                            │
+                     typst-kmp-core
+            World · VFS · exporters · diagnostics
+                            │
+                     typst 0.15 (Rust)
+```
+
+Only JSON strings and byte arrays cross the FFI boundary, so each platform binding is about a
+hundred lines and identical in shape.
+
+### The resolution loop
+
+The compiler cannot fetch anything itself. A missing file or package comes back as structured data
+rather than a parsed error message:
+
+```
+compile() → missing @preview/cetz:0.3.0 → packageResolver.resolve(spec) → VFS → compile() → …
+```
+
+This pays off three ways: Kotlin/Native needs no `staticCFunction` with captured state, path
+traversal is impossible because there are no paths, and it is the only design that survives the
+browser, where a package download is inherently asynchronous and cannot happen inside a synchronous
+call into WebAssembly.
+
+Supply the resolvers through `TypstConfig`:
+
+```kotlin
+val config = TypstConfig(
+    fileResolver = FileResolver { path -> readFromDisk(path) },
+    packageResolver = { spec -> httpClient.get("https://packages.typst.org/…").body() },
+)
+```
+
+## Outputs
+
+`CompileRequest.outputs` accepts any combination; asking for several reuses a single layout pass.
+
+| Format | Produces |
+| --- | --- |
+| `OutputFormat.Pdf` | one PDF, optionally targeting a PDF/A standard |
+| `OutputFormat.Svg` | one SVG per page, or one merged document |
+| `OutputFormat.Png` | one PNG per page at a chosen `pixelPerPt` |
+| `OutputFormat.Query` | JSON, the equivalent of `typst query` |
+
+## Building
+
+You need the [Rust toolchain](https://rustup.rs) on `PATH`, plus the targets you intend to build:
+
+```bash
+rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios   # iOS
+rustup target add x86_64-pc-windows-gnu                                      # mingwX64
+cargo install cargo-ndk                                                      # Android
+```
+
+Then:
+
+```bash
+cd rust && cargo test          # the Rust core, no Gradle involved
+./gradlew :typst:jvmTest       # first end-to-end PDF
+./gradlew :typst:linuxX64Test  # cinterop + static linking
+```
+
+Gradle drives cargo automatically; `build-logic` maps each Kotlin target to its Rust triple.
+
+Useful properties:
+
+| Property | Effect |
+| --- | --- |
+| `-Ptypst.cargoProfile=dev` | build the Rust crates unoptimised (much faster, much slower output) |
+| `-Ptypst.skipCargo=true` | do not build any Rust at all — type-checks the Kotlin sources on a machine without a toolchain |
+| `-Ptypst.prebuiltDir=<dir>` | use native artifacts from `<dir>/<triple>/`, as the CI publish job does |
+| `-Ptypst.windowsAbi=gnu` | build the Windows **JVM** library with MinGW instead of MSVC |
+
+### A note on Windows ABIs
+
+`mingwX64` always maps to the **GNU** ABI (`x86_64-pc-windows-gnu`), because that is what
+Kotlin/Native links with. The JVM library normally uses MSVC, which needs the Visual Studio Build
+Tools with the C++ workload.
+
+If you do not have those, `-Ptypst.windowsAbi=gnu` builds the JVM library with MinGW too — the JVM
+loads either ABI happily. Kotlin/Native already ships a suitable MinGW-w64 under
+`~/.konan/dependencies/msys2-mingw-w64-x86_64-*/bin`; put it on `PATH` and use a GNU-host Rust
+toolchain:
+
+```bash
+rustup toolchain install stable-x86_64-pc-windows-gnu
+export RUSTUP_TOOLCHAIN=stable-x86_64-pc-windows-gnu
+./gradlew :typst:jvmTest -Ptypst.windowsAbi=gnu
+```
+
+Released Windows artifacts are built with MSVC on CI.
+
+## Module layout
+
+| Module | Purpose |
+| --- | --- |
+| `rust/typst-kmp-core` | the engine: `World`, VFS, exporters, diagnostics |
+| `rust/typst-kmp-cabi` | `extern "C"` facade plus a cbindgen-generated header, for cinterop |
+| `rust/typst-kmp-jni` | JNI facade for the JVM and Android |
+| `typst` | the published Kotlin Multiplatform library |
+| `typst-android-native` | an AAR that carries nothing but `jniLibs/*.so` — see below |
+| `build-logic` | the Gradle ↔ cargo integration |
+
+`typst-android-native` exists because the AGP Kotlin Multiplatform library plugin
+(`com.android.kotlin.multiplatform.library`) supports neither `jniLibs` nor `packagingOptions` nor
+`externalNativeBuild`; the [Android documentation](https://developer.android.com/kotlin/multiplatform/plugin)
+points at a separate `com.android.library` module as the way out.
+
+## Known trade-offs
+
+* **Binary size.** The native library is roughly 15–30 MB per platform, about 10 MB of which is the
+  embedded font bundle. Build the Rust crates with `--no-default-features` to drop
+  `embed-fonts` and supply fonts through `TypstConfig.fonts` instead.
+* **The JVM jar bundles every platform**, so it is large. Splitting it into classifier jars is a
+  planned follow-up.
+* **Android tests.** The common test suite cannot run as `androidHostTest`, because the Android
+  loader calls `System.loadLibrary` and a plain JVM cannot satisfy it. Android is covered by
+  instrumented device tests.
+* **watchOS and tvOS are not supported.** Their Rust targets are tier 3 and would need a nightly
+  toolchain with `-Z build-std`.
+* **Web (`js`, `wasmJs`) is not implemented yet.** The resolution loop above already handles the
+  asynchrony it needs; what is missing is a `wasm-bindgen` crate and the JS glue.
+
+## Licence
+
+Apache 2.0. Typst itself is Apache 2.0 as well.
