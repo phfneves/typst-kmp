@@ -44,14 +44,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # jvmJarTest runs the same suite against the assembled jars, so the resource lookup the
+          # published artifacts rely on is exercised too. Windows is where a classifier or library
+          # naming bug would hide, so it runs there as well.
           - name: JVM (Linux)
             os: ubuntu-latest
             rust-targets: x86_64-unknown-linux-gnu
-            tasks: :typst:jvmTest
+            tasks: :typst:jvmTest :typst:jvmJarTest :typst:jvmNativeJars
+            native-classifier: linux-x86_64
+            native-library: libtypst_kmp_jni.so
           - name: JVM (Windows)
             os: windows-latest
             rust-targets: x86_64-pc-windows-msvc
-            tasks: :typst:jvmTest
+            tasks: :typst:jvmTest :typst:jvmJarTest
           - name: Kotlin/Native (Linux)
             os: ubuntu-latest
             rust-targets: x86_64-unknown-linux-gnu
@@ -84,6 +89,35 @@ jobs:
           key: ${{ runner.os }}-konan-${{ hashFiles('gradle/libs.versions.toml') }}
       - name: Test
         run: ./gradlew ${{ matrix.tasks }}
+      # jvmJarTest would still pass if the two jars merged back into one fat jar — only this
+      # notices. Linux only: it needs unzip, which the Git Bash on windows-latest does not carry.
+      # Version-agnostic globbing, because no job pins -Ptypst.version.
+      - name: Verify the JVM jars are split by platform
+        if: matrix.native-classifier != ''
+        run: |
+          libs=typst/build/libs
+          prefix=io/github/phfneves/typst/native
+          main=$(find "$libs" -maxdepth 1 -name 'typst-jvm-*.jar' \
+            ! -name '*-sources.jar' ! -name '*-javadoc.jar' ! -name '*-all.jar' \
+            ! -name '*-linux-*.jar' ! -name '*-macos-*.jar' ! -name '*-windows-*.jar')
+          [ -f "$main" ] || { echo "expected exactly one main jvm jar, got: $main"; exit 1; }
+          leaked=$(unzip -Z1 "$main" | grep "^$prefix/" || true)
+          if [ -n "$leaked" ]; then
+            echo "the main jar still carries native libraries:"; echo "$leaked"; exit 1
+          fi
+          echo "ok: $(basename "$main") is classes only ($(du -h "$main" | cut -f1))"
+          # The 'all' jar legitimately holds only this runner's library: without -Ptypst.prebuiltDir
+          # the host is the only platform cargo can produce. publish.yml checks it is complete.
+          for classifier in ${{ matrix.native-classifier }} all; do
+            jar=$(find "$libs" -maxdepth 1 -name "typst-jvm-*-$classifier.jar")
+            [ -f "$jar" ] || { echo "missing classifier jar for '$classifier'"; exit 1; }
+            # Directory entries are listed too, and carry a trailing slash; drop them.
+            entries=$(unzip -Z1 "$jar" | grep "^$prefix/" | grep -v '/$' || true)
+            expected="$prefix/${{ matrix.native-classifier }}/${{ matrix.native-library }}"
+            [ "$entries" = "$expected" ] \
+              || { echo "$jar holds '$entries', expected '$expected' alone"; exit 1; }
+            echo "ok: $(basename "$jar") -> $entries ($(du -h "$jar" | cut -f1))"
+          done
       # Each suite compiles src/commonTest/typst/report.typ and writes the PDF here, so a failure
       # can be looked at rather than guessed at.
       - uses: actions/upload-artifact@v4

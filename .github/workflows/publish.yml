@@ -106,6 +106,29 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
+      - name: Assemble the JVM jars
+        run: >
+          ./gradlew :typst:jvmJar :typst:jvmNativeJars
+          "-Ptypst.prebuiltDir=${{ github.workspace }}/prebuilt-raw"
+          --no-configuration-cache
+      # Guards the one failure mode the per-PR check cannot see: a release whose classifier jars
+      # cover only some platforms, because a native artifact never made it out of its runner. The
+      # publish below finds these jars up to date, so assembling them here costs nothing.
+      - name: Verify every platform is packaged
+        run: |
+          libs=typst/build/libs
+          prefix=io/github/phfneves/typst/native
+          all=$(find "$libs" -maxdepth 1 -name 'typst-jvm-*-all.jar')
+          [ -f "$all" ] || { echo "no 'all' jar was built"; exit 1; }
+          for platform in linux-x86_64 linux-aarch64 macos-x86_64 macos-aarch64 windows-x86_64; do
+            jar=$(find "$libs" -maxdepth 1 -name "typst-jvm-*-$platform.jar")
+            [ -f "$jar" ] || { echo "no classifier jar for $platform"; exit 1; }
+            unzip -Z1 "$jar" | grep -q "^$prefix/$platform/[^/]" \
+              || { echo "$(basename "$jar") does not carry $platform"; exit 1; }
+            unzip -Z1 "$all" | grep -q "^$prefix/$platform/[^/]" \
+              || { echo "the 'all' jar does not carry $platform"; exit 1; }
+            echo "ok: $platform"
+          done
       - name: Publish
         run: >
           ./gradlew publishToMavenCentral

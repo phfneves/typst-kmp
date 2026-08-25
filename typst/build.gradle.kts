@@ -1,3 +1,4 @@
+import io.github.phfneves.typst.gradle.CargoBuildTask
 import io.github.phfneves.typst.gradle.GenerateTypstFixturesTask
 import io.github.phfneves.typst.gradle.HostFamily
 import io.github.phfneves.typst.gradle.RustArtifactKind
@@ -154,32 +155,99 @@ kotlin {
     }
 }
 
-// --- JVM: ship the JNI library inside the jar and point tests at the freshly built one ---------
+// --- JVM: one jar of classes, one jar per platform's JNI library -------------------------------
 
 /*
- * Which JVM platforms end up inside the jar.
+ * Which JVM platforms have a native library in this build.
  *
- * Locally only the host's library can be produced, so that is all the jar gets. The CI publish
- * job passes `-Ptypst.prebuiltDir=…` with binaries built on their own runners, and then every
- * platform is packaged into a single jar that works everywhere.
+ * Locally only the host's can be produced, so that is the only classifier jar registered — asking
+ * for the others would wire up a cargo build this machine cannot run. The CI publish job passes
+ * `-Ptypst.prebuiltDir=…` with binaries built on their own runners, and then all five appear.
  *
  * Registered up front: registering tasks from inside another task's configuration action is not
  * allowed.
  */
 val jvmNativeTargets = if (usePrebuiltNatives) RustTargets.jvm else listOf(hostRustTarget)
 
-val jvmNativeBuilds = jvmNativeTargets.mapNotNull { target ->
-    target.jvmPlatformId?.let { platformId ->
-        platformId to cargo.build("typst-kmp-jni", target, RustArtifactKind.DYNAMIC_LIB)
+val jvmNativeBuilds: List<Pair<String, TaskProvider<CargoBuildTask>>> =
+    jvmNativeTargets.mapNotNull { target ->
+        target.jvmPlatformId?.let { platformId ->
+            platformId to cargo.build("typst-kmp-jni", target, RustArtifactKind.DYNAMIC_LIB)
+        }
     }
+
+/** `linux-x86_64` → `LinuxX64`, so task names read like the Kotlin target names do. */
+fun jvmPlatformTaskSuffix(platformId: String): String {
+    val (os, arch) = platformId.split('-', limit = 2)
+    val architecture = when (arch) {
+        "x86_64" -> "X64"
+        "aarch64" -> "Arm64"
+        else -> error("No task-name suffix mapped for the JVM platform '$platformId'.")
+    }
+    return os.replaceFirstChar { it.uppercase() } + architecture
 }
 
-tasks.named<ProcessResources>("jvmProcessResources") {
-    jvmNativeBuilds.forEach { (platformId, task) ->
-        from(task.map { it.outputDir }) {
+/**
+ * A jar carrying nothing but JNI libraries, laid out where `NativeLibrary.jvm.kt` looks for them.
+ *
+ * An extension on `Project` because a top-level function in a build script does not see the
+ * script's implicit receiver.
+ */
+fun Project.registerJvmNativeJar(
+    taskName: String,
+    classifier: String,
+    builds: List<Pair<String, TaskProvider<CargoBuildTask>>>,
+): TaskProvider<Jar> = tasks.register<Jar>(taskName) {
+    group = "build"
+    description = "Packages the JNI library for '$classifier' as a classifier jar."
+    // Mirrors jvmJar, whose archive is typst-jvm-<version>.jar.
+    archiveBaseName.set("typst")
+    archiveAppendix.set("jvm")
+    archiveClassifier.set(classifier)
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
+    builds.forEach { (platformId, build) ->
+        from(build.map { it.outputDir }) {
             into("io/github/phfneves/typst/native/$platformId")
         }
     }
+}
+
+val jvmNativeJarTasks: List<Pair<String, TaskProvider<Jar>>> =
+    jvmNativeBuilds.map { (platformId, build) ->
+        platformId to registerJvmNativeJar(
+            taskName = "jvmNativeJar${jvmPlatformTaskSuffix(platformId)}",
+            classifier = platformId,
+            builds = listOf(platformId to build),
+        )
+    }
+
+/**
+ * Every platform in one jar.
+ *
+ * Opt-in, for an application shipped as a single cross-platform bundle. Locally it degrades to the
+ * host's library alone, which is exactly what the old fat jar contained on a dev machine.
+ */
+val jvmNativeJarAll = registerJvmNativeJar("jvmNativeJarAll", "all", jvmNativeBuilds)
+
+tasks.register("jvmNativeJars") {
+    group = "build"
+    description = "Builds every per-platform JVM native jar, plus the combined 'all' jar."
+    dependsOn(jvmNativeJarTasks.map { it.second })
+    dependsOn(jvmNativeJarAll)
+}
+
+/*
+ * Attach the classifier jars to the KMP `jvm` publication, i.e. to `typst-kmp-jvm`.
+ *
+ * `mavenPublication` is replayed against the publication whenever it is created, so this neither
+ * has to run before nor after the publishing plugin. Signing is safe for the same reason:
+ * `signing.sign(publication)` watches the publication's artifacts live, so artifacts added after
+ * the signing task was created are still signed and still published as `.asc`.
+ */
+kotlin.targets.getByName("jvm").mavenPublication {
+    jvmNativeJarTasks.forEach { (_, jar) -> artifact(jar) }
+    artifact(jvmNativeJarAll)
 }
 
 // --- Test fixtures and their inspectable output ------------------------------------------------
@@ -213,6 +281,56 @@ tasks.named<Test>("jvmTest") {
         },
     )
     testLogging { showStandardStreams = true }
+}
+
+/*
+ * The same suite, this time loading the library the way a consumer does.
+ *
+ * `jvmTest` hands the loader an absolute path through `typst.kmp.library.path`, so it never walks
+ * the `getResourceAsStream` branch that every published artifact depends on. Here the main jar and
+ * the host's classifier jar are the only things on the classpath that could carry the library, and
+ * nothing tells the loader where to look.
+ */
+val hostNativeJar = jvmNativeJarTasks
+    .firstOrNull { (platformId, _) -> platformId == hostRustTarget.jvmPlatformId }
+    ?.second
+
+if (hostNativeJar != null) {
+    val jvmTarget = kotlin.targets.getByName("jvm")
+    val jvmMainOutputs = jvmTarget.compilations.getByName("main").output.allOutputs
+    val jvmTestCompilation = jvmTarget.compilations.getByName("test")
+    val jvmJar = tasks.named<Jar>("jvmJar")
+    // A sibling of the jvmTest output: both suites write typst-kmp-report-jvm.pdf, and both are
+    // picked up by the workflow's upload of build/test-artifacts/.
+    val jarTestArtifacts = layout.buildDirectory.dir("test-artifacts/jvm-from-jar")
+
+    tasks.register<Test>("jvmJarTest") {
+        group = "verification"
+        description =
+            "Runs the common suite against the assembled JVM jars, without a library path override."
+
+        testClassesDirs = jvmTestCompilation.output.classesDirs
+
+        // The jars stand in for the main compilation's classes and resources. Subtracting those
+        // directories is what makes the run prove the library really came out of a jar: leave them
+        // on and a regression that refilled the main jar's resources would go unnoticed here.
+        classpath = files(
+            jvmJar.flatMap { it.archiveFile },
+            hostNativeJar.flatMap { it.archiveFile },
+            jvmTestCompilation.output.allOutputs,
+        ) + ((jvmTestCompilation.runtimeDependencyFiles ?: files()) - jvmMainOutputs)
+
+        // Matches the framework jvmTest defaults to, and hence the kotlin-test variant Kotlin
+        // infers from it. If one ever moves to the JUnit platform, the other must follow.
+        useJUnit()
+
+        jvmArgumentProviders.add(
+            CommandLineArgumentProvider {
+                listOf("-Dtypst.test.output=${jarTestArtifacts.get().asFile.absolutePath}")
+            },
+        )
+        testLogging { showStandardStreams = true }
+    }
 }
 
 // Kotlin/Native test binaries read the directory from the environment instead.

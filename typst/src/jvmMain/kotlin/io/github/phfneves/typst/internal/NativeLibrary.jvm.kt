@@ -24,7 +24,9 @@ internal actual fun loadTypstNativeLibrary() {
     val stream = NativeEngine::class.java.getResourceAsStream(resource)
         ?: throw TypstNativeException(
             "No native Typst library for $platform on the classpath ($resource). " +
-                "Add the typst-kmp-jvm artifact for your platform, or set the " +
+                "The library ships separately from the classes: add " +
+                "io.github.phfneves:typst-kmp-jvm:<version>:$platform to the runtime classpath " +
+                "(or the :all classifier, which carries every platform), or set the " +
                 "typst.kmp.library.path system property to a locally built library.",
         )
 

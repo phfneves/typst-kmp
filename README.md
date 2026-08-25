@@ -25,6 +25,97 @@ Typst.create().use { typst ->
 }
 ```
 
+## Installation
+
+Nothing is published yet — the coordinates below are what the CI publish job produces.
+
+```kotlin
+repositories { mavenCentral() }
+```
+
+On the JVM the compiled classes and the native library ship as **separate artifacts**: the main
+`typst-kmp-jvm` jar is bytecode only (~160 KB), and each platform's JNI library is a classifier jar
+of its own (~20 MB compressed). Gradle module metadata cannot reach a classifier artifact, so the
+native jar is always one explicit extra line — nothing infers it for you.
+
+```kotlin
+// Kotlin Multiplatform
+kotlin {
+    sourceSets {
+        commonMain.dependencies {
+            implementation("io.github.phfneves:typst-kmp:<version>")
+        }
+        jvmMain.dependencies {
+            // Pick the classifier matching where the JVM will run.
+            runtimeOnly("io.github.phfneves:typst-kmp-jvm:<version>:linux-x86_64")
+        }
+    }
+}
+```
+
+```kotlin
+// Plain JVM
+dependencies {
+    implementation("io.github.phfneves:typst-kmp-jvm:<version>")
+    runtimeOnly("io.github.phfneves:typst-kmp-jvm:<version>:linux-x86_64")
+}
+```
+
+```xml
+<!-- Maven -->
+<dependency>
+  <groupId>io.github.phfneves</groupId>
+  <artifactId>typst-kmp-jvm</artifactId>
+  <version>${typst.version}</version>
+</dependency>
+<dependency>
+  <groupId>io.github.phfneves</groupId>
+  <artifactId>typst-kmp-jvm</artifactId>
+  <version>${typst.version}</version>
+  <classifier>linux-x86_64</classifier>
+  <scope>runtime</scope>
+</dependency>
+```
+
+Android needs no extra line: `typst-kmp-android-native` carries the `jniLibs` and comes in
+transitively.
+
+### JVM classifiers
+
+| classifier | library |
+| --- | --- |
+| `linux-x86_64` | `libtypst_kmp_jni.so` |
+| `linux-aarch64` | `libtypst_kmp_jni.so` |
+| `macos-x86_64` | `libtypst_kmp_jni.dylib` |
+| `macos-aarch64` | `libtypst_kmp_jni.dylib` |
+| `windows-x86_64` | `typst_kmp_jni.dll` |
+| `all` | every one of the above, in a single ~200 MB jar |
+
+Use `all` only when one build has to run everywhere — a desktop application shipped as a single
+cross-platform bundle. For anything that knows its own target, a single classifier keeps the
+download to one library instead of five.
+
+To resolve the classifier for the machine running the build:
+
+```kotlin
+val classifier = run {
+    val os = System.getProperty("os.name").lowercase()
+    val arch = when (System.getProperty("os.arch").lowercase()) {
+        "x86_64", "amd64" -> "x86_64"
+        "aarch64", "arm64" -> "aarch64"
+        else -> error("Unsupported architecture")
+    }
+    when {
+        os.startsWith("windows") -> "windows-x86_64"
+        os.startsWith("mac") -> "macos-$arch"
+        else -> "linux-$arch"
+    }
+}
+```
+
+For a platform with no published classifier, build the `typst-kmp-jni` crate yourself and point the
+loader at it with `-Dtypst.kmp.library.path=/path/to/library`.
+
 ## Why not just wrap `java-typst`?
 
 [`g0ddest/java-typst`](https://github.com/g0ddest/java-typst) solves the same problem for Java, and
@@ -119,6 +210,7 @@ Then:
 ```bash
 cd rust && cargo test          # the Rust core, no Gradle involved
 ./gradlew :typst:jvmTest       # JNI
+./gradlew :typst:jvmJarTest    # the same suite, loading the library out of the assembled jars
 ./gradlew :typst:linuxX64Test  # cinterop + static linking (mingwX64Test on Windows)
 
 # Instrumented, against a running emulator or device. The ABI filter matters: without it every
@@ -138,7 +230,13 @@ It then writes the PDF where you can open it:
 | Suite | PDF lands in |
 | --- | --- |
 | `jvmTest`, `linuxX64Test`, `mingwX64Test`, … | `typst/build/test-artifacts/` |
+| `jvmJarTest` | `typst/build/test-artifacts/jvm-from-jar/` |
 | `connectedAndroidDeviceTest` | `typst/build/outputs/connected_android_test_additional_output/` |
+
+`jvmJarTest` runs that same suite a second time, against the assembled jars. `jvmTest` hands the
+loader an absolute path through `typst.kmp.library.path`, so it never walks the resource lookup
+every published artifact depends on; `jvmJarTest` puts the main jar and the host's classifier jar
+on the classpath and sets no override, so a packaging mistake fails a test instead of a release.
 
 The Android path goes through AGP's `additionalTestOutputDir` runner argument, because the test
 app is uninstalled the moment the run ends and its own directories go with it.
@@ -216,8 +314,11 @@ points at a separate `com.android.library` module as the way out.
   font bundle — build the Rust crates with `--no-default-features` to drop `embed-fonts` and
   supply fonts through `TypstConfig.fonts` instead. Android apps should rely on ABI splits or app
   bundles so a device only downloads its own architecture.
-* **The JVM jar bundles every platform**, so it is large. Splitting it into classifier jars is a
-  planned follow-up.
+* **The JVM native library ships separately from the classes.** `typst-kmp-jvm` carries only
+  bytecode; the JNI library comes from a classifier jar (see [Installation](#installation)). A
+  single-platform application downloads one library instead of five, at the cost of one dependency
+  line that Gradle module metadata cannot infer for you. The `all` classifier is there for the
+  cross-platform bundle that genuinely needs every one.
 * **Debug Android builds carry release-optimised native libraries.** The cargo profile follows
   `typst.cargoProfile`, not the Android variant, because an unoptimised Typst is too slow to be
   useful. Pass `-Ptypst.cargoProfile=dev` when you actually want to debug the Rust side.
