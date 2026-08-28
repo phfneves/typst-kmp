@@ -213,10 +213,12 @@ abstract class CargoBuildTask : DefaultTask() {
         val descriptor = RustTargets.native.firstOrNull { it.triple == target }
             ?: RustTargets.jvm.firstOrNull { it.triple == target }
             ?: RustTargets.android.firstOrNull { it.triple == target }
+            ?: RustTargets.wasm.takeIf { it.triple == target }
             ?: RustTarget(target)
         return when (kind) {
             RustArtifactKind.STATIC_LIB -> descriptor.staticLibFileName(crate)
-            RustArtifactKind.DYNAMIC_LIB -> descriptor.dynamicLibFileName(crate)
+            RustArtifactKind.DYNAMIC_LIB, RustArtifactKind.WASM ->
+                descriptor.dynamicLibFileName(crate)
         }
     }
 }

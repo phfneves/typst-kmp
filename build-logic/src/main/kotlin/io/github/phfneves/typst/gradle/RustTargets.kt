@@ -3,12 +3,15 @@ package io.github.phfneves.typst.gradle
 /**
  * The Rust artifact kind a given consumer needs.
  *
- * Kotlin/Native links a static archive straight into the klib, while the JVM and Android load a
- * shared library at runtime through JNI.
+ * Kotlin/Native links a static archive straight into the klib, the JVM and Android load a shared
+ * library at runtime through JNI, and the web targets load a WebAssembly module in a worker.
  */
 enum class RustArtifactKind {
     STATIC_LIB,
     DYNAMIC_LIB,
+
+    /** A `cdylib` for `wasm32-unknown-unknown`, post-processed by wasm-bindgen. */
+    WASM,
 }
 
 /**
@@ -35,6 +38,7 @@ data class RustTarget(
     fun dynamicLibFileName(crate: String): String {
         val stem = crate.replace('-', '_')
         return when {
+            isWasm -> "$stem.wasm"
             isWindows -> "$stem.dll"
             isApple -> "lib$stem.dylib"
             else -> "lib$stem.so"
@@ -45,10 +49,12 @@ data class RustTarget(
     val isMsvc: Boolean get() = triple.endsWith("msvc")
     val isApple: Boolean get() = triple.contains("apple")
     val isAndroid: Boolean get() = triple.contains("android")
+    val isWasm: Boolean get() = triple.startsWith("wasm32")
 
     /** Host OS family able to build this target without a cross-compilation toolchain. */
     val requiredHostFamily: HostFamily
         get() = when {
+            isWasm -> HostFamily.ANY
             isApple -> HostFamily.MAC
             isAndroid -> HostFamily.ANY
             isWindows -> HostFamily.WINDOWS
@@ -142,6 +148,10 @@ object RustTargets {
     val androidArm64 = RustTarget("aarch64-linux-android", androidAbi = "arm64-v8a")
     val androidArm32 = RustTarget("armv7-linux-androideabi", androidAbi = "armeabi-v7a")
     val androidX64 = RustTarget("x86_64-linux-android", androidAbi = "x86_64")
+
+    // --- Web (a WebAssembly module post-processed by wasm-bindgen) -----------------------------
+
+    val wasm = RustTarget("wasm32-unknown-unknown")
 
     /** Targets consumed by Kotlin/Native through cinterop. */
     val native: List<RustTarget> = listOf(

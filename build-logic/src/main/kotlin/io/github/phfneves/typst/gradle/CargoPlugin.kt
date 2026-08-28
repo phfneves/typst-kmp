@@ -7,6 +7,7 @@ import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.MapProperty
 import org.gradle.api.provider.Property
+import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.TaskProvider
 import java.io.File
 import javax.inject.Inject
@@ -61,10 +62,31 @@ abstract class CargoExtension @Inject constructor(private val project: Project) 
      */
     abstract val cargoExecutable: Property<String>
 
+    /**
+     * The `wasm-bindgen` executable. Resolved the same way as [cargoExecutable], because rustup
+     * installs both into the same bin directory. Override with `-Ptypst.wasmBindgen=<path>`.
+     */
+    abstract val wasmBindgenExecutable: Property<String>
+
+    /**
+     * Whether the WebAssembly module carries the bundled fonts. `-Ptypst.wasmEmbedFonts=false`
+     * builds the slim variant.
+     *
+     * Every other platform embeds them unconditionally, so this is the one place where
+     * `TypstConfig.embedDefaultFonts` can mean something different from platform to platform. It
+     * exists because those fonts are roughly a quarter of a download the browser must complete
+     * before it can typeset anything.
+     */
+    abstract val wasmEmbedFonts: Property<Boolean>
+
     init {
         workspaceDir.convention(project.rootProject.layout.projectDirectory.dir("rust"))
         profile.convention(project.providers.gradleProperty("typst.cargoProfile").orElse("release"))
         noDefaultFeatures.convention(false)
+        wasmEmbedFonts.convention(
+            project.providers.gradleProperty("typst.wasmEmbedFonts").map { it.toBoolean() }
+                .orElse(true),
+        )
         skipCargo.convention(
             project.providers.gradleProperty("typst.skipCargo").map { it.toBoolean() }.orElse(false),
         )
@@ -73,20 +95,26 @@ abstract class CargoExtension @Inject constructor(private val project: Project) 
         }
         cargoExecutable.convention(
             project.providers.gradleProperty("typst.cargo").orElse(
-                project.provider { findCargo(project) },
+                project.provider { findExecutable(project, "cargo") },
+            ),
+        )
+        wasmBindgenExecutable.convention(
+            project.providers.gradleProperty("typst.wasmBindgen").orElse(
+                project.provider { findExecutable(project, "wasm-bindgen") },
             ),
         )
     }
 
     /**
-     * Looks for cargo on PATH, then in rustup's default install location.
+     * Looks for [name] on PATH, then in rustup's default install location.
      *
      * Falls back to the bare name so the task still runs — and still produces its own install
-     * hint — on a machine with no toolchain at all.
+     * hint — on a machine with no toolchain at all. `wasm-bindgen` is resolved the same way as
+     * cargo because `cargo install` puts it in the very same bin directory.
      */
-    private fun findCargo(project: Project): String {
+    private fun findExecutable(project: Project, name: String): String {
         val windows = HostFamily.of(System.getProperty("os.name")) == HostFamily.WINDOWS
-        val executable = if (windows) "cargo.exe" else "cargo"
+        val executable = if (windows) "$name.exe" else name
 
         val onPath = System.getenv("PATH")
             ?.split(File.pathSeparator)
@@ -100,7 +128,7 @@ abstract class CargoExtension @Inject constructor(private val project: Project) 
             ?: File(System.getProperty("user.home"), ".cargo")
         val inCargoHome = File(cargoHome, "bin/$executable")
         if (inCargoHome.isFile) {
-            project.logger.info("Using cargo from ${inCargoHome.absolutePath} (not on PATH).")
+            project.logger.info("Using $name from ${inCargoHome.absolutePath} (not on PATH).")
             return inCargoHome.absolutePath
         }
 
@@ -130,6 +158,68 @@ abstract class CargoExtension @Inject constructor(private val project: Project) 
             ?.takeIf { it.isNotEmpty() }
     }
 
+    /**
+     * Builds [crate] for `wasm32-unknown-unknown` and runs wasm-bindgen over the result.
+     *
+     * The returned task produces a directory holding `<crate>.js` and `<crate>_bg.wasm` — the pair
+     * the browser loads. The expected CLI version is read out of the crate's own `Cargo.toml`, so
+     * the pin lives in exactly one place.
+     */
+    fun wasmBindgen(crate: String): TaskProvider<WasmBindgenTask> {
+        val target = RustTargets.wasm
+        val cargoTask = build(crate, target, RustArtifactKind.WASM)
+        val embedFonts = wasmEmbedFonts
+        cargoTask.configure { noDefaultFeatures.set(embedFonts.map { embed -> !embed }) }
+        val taskName = "wasmBindgen" + crate.toCamel()
+        if (taskName in project.tasks.names) {
+            @Suppress("UNCHECKED_CAST")
+            return project.tasks.named(taskName) as TaskProvider<WasmBindgenTask>
+        }
+
+        val stem = crate.replace('-', '_')
+        val version = wasmBindgenVersion(crate)
+        val configuredExecutable = wasmBindgenExecutable
+        val configuredSkip = skipCargo
+        // A subdirectory of the triple, so the staged layout can hold both the raw `.wasm` the
+        // cargo task expects and the wasm-bindgen output this one does.
+        val prebuiltForTarget = prebuiltDir.orNull?.asFile?.resolve(target.triple)?.resolve("bindgen")
+        val output = project.layout.buildDirectory.dir("rust/${target.triple}/$crate-bindgen")
+
+        val provider = project.tasks.register(taskName, WasmBindgenTask::class.java)
+        provider.configure {
+            group = "rust"
+            description = "Runs wasm-bindgen over $crate"
+
+            wasmDir.set(cargoTask.flatMap { it.outputDir })
+            wasmFileName.set(target.dynamicLibFileName(crate))
+            outputName.set(stem)
+            expectedVersion.set(version)
+            wasmBindgenExecutable.set(configuredExecutable)
+            skipCargo.set(configuredSkip)
+            prebuiltForTarget?.let { prebuiltDir.set(it) }
+            usePrebuilt.set(prebuiltForTarget?.isDirectory == true)
+            outputDir.set(output)
+        }
+        return provider
+    }
+
+    /**
+     * The exact `wasm-bindgen` version [crate] pins, read from its manifest.
+     *
+     * Duplicating the number in the build script is how it goes stale, and a mismatch between the
+     * crate and the CLI is a confusing failure to debug.
+     */
+    private fun wasmBindgenVersion(crate: String): Provider<String> =
+        project.providers.fileContents(
+            workspaceDir.file("$crate/Cargo.toml"),
+        ).asText.map { manifest ->
+            val declaration = manifest.lineSequence()
+                .map(String::trim)
+                .firstOrNull { it.startsWith("wasm-bindgen") && it.contains('=') }
+                ?: error("$crate/Cargo.toml does not declare a wasm-bindgen dependency.")
+            Regex("""\d+\.\d+\.\d+""").find(declaration)?.value
+                ?: error("Could not read a wasm-bindgen version out of: $declaration")
+        }
     fun build(
         crate: String,
         target: RustTarget,
