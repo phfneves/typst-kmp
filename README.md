@@ -2,12 +2,14 @@
 
 The [Typst](https://typst.app) typesetting compiler as a Kotlin Multiplatform library — no `typst`
 binary to install, no subprocess, no server round-trip. The compiler is embedded and runs in
-process on Android, the JVM, iOS, macOS, Linux and Windows.
+process on Android, the JVM, iOS, macOS, Linux, Windows and in the browser.
 
 > **Status: work in progress.** The same 13-test `commonTest` suite runs green on the JVM (JNI),
-> on Kotlin/Native (cinterop) and on an Android emulator (instrumented), on top of 15 Rust tests.
-> Each run compiles a real multi-page document and writes the PDF out for inspection. Apple and
-> Linux targets are configured but have only ever been built by CI, and nothing has been published.
+> on Kotlin/Native (cinterop), on an Android emulator (instrumented) and in a browser on both
+> `js` and `wasmJs` (wasm-bindgen), on top of 15 Rust tests. Each run compiles a real multi-page
+> document and — everywhere but the browser, which has nowhere to write one — leaves the PDF for
+> inspection. Apple and Linux targets are configured but have only ever been built by CI, and
+> nothing has been published.
 
 ```kotlin
 Typst.create().use { typst ->
@@ -29,11 +31,12 @@ Typst.create().use { typst ->
 
 [`demo/`](demo/) is a Compose Multiplatform application built on the library: edit a Typst document
 on one side, watch its pages render on the other, export the PDF. It runs on Android, on the
-desktop and on iOS, and it is a separate Gradle build that consumes typst-kmp by its published
-coordinates — so it doubles as a worked example of the installation below.
+desktop, on iOS and in a browser, and it is a separate Gradle build that consumes typst-kmp by its
+published coordinates — so it doubles as a worked example of the installation below.
 
 ```bash
 ./gradlew -p demo :desktopApp:run
+./gradlew -p demo :webApp:wasmJsBrowserDevelopmentRun   # or jsBrowserDevelopmentRun
 ```
 
 ## Installation
@@ -89,7 +92,8 @@ dependencies {
 ```
 
 Android needs no extra line: `typst-kmp-android-native` carries the `jniLibs` and comes in
-transitively.
+transitively. The web targets need no extra dependency either, but they do need two files served
+alongside the page — see [Web](#web).
 
 ### JVM classifiers
 
@@ -127,6 +131,62 @@ val classifier = run {
 For a platform with no published classifier, build the `typst-kmp-jni` crate yourself and point the
 loader at it with `-Dtypst.kmp.library.path=/path/to/library`.
 
+### Web
+
+Both `js` and `wasmJs` are supported, **in a browser only** — the engine needs a `Worker` and
+fetches its module over HTTP, neither of which Node offers as-is.
+
+The compiler is a WebAssembly module, so unlike every other platform it is not linked into the
+artifact the Kotlin compiler produces: it is fetched at runtime. Two files have to be reachable
+from the page:
+
+```
+typst_kmp_wasm.js        19 KB    the wasm-bindgen glue
+typst_kmp_wasm_bg.wasm   40 MB    the compiler (17 MB over gzip, 11 MB over brotli)
+```
+
+They are published as a `webassets` classifier on both web artifacts — `typst-kmp-js` and
+`typst-kmp-wasm-js` — and the two zips are identical, so a project building both targets only needs
+one. Unzip it into your distribution at `typst-kmp/`, which is where the engine looks by default:
+
+```kotlin
+// Gradle: unpack the module into the browser distribution.
+val typstWebAssets by configurations.creating
+dependencies {
+    typstWebAssets("io.github.phfneves:typst-kmp-js:<version>:webassets@zip")
+}
+val unpackTypst by tasks.registering(Copy::class) {
+    from(typstWebAssets.map { zipTree(it) })
+    into(layout.buildDirectory.dir("typstWebAssets/typst-kmp"))
+}
+tasks.named("jsProcessResources") { (this as Copy).from(unpackTypst) }
+```
+
+[`demo/webApp`](demo/webApp/build.gradle.kts) does exactly this, against the sources next door
+rather than a repository.
+
+Serving them from somewhere else — a CDN, a versioned asset host — needs no build wiring at all,
+only a config line. A cross-origin location works as long as it sends CORS headers:
+
+```kotlin
+Typst.create(TypstConfig(webAssetBaseUrl = "https://cdn.example.com/typst-kmp/0.1.0/"))
+```
+
+Two things worth knowing about how this runs:
+
+* **The engine lives in a Web Worker.** Typesetting takes seconds and a page has one thread, so
+  `compile()` would otherwise freeze the UI. The worker is started from a `Blob` holding a script
+  compiled into the library, so there is nothing extra to host, nothing for a bundler to resolve,
+  and the worker is always same-origin — which is what leaves the module itself free to be
+  cross-origin.
+* **A Rust panic is fatal to that engine.** `wasm32-unknown-unknown` cannot unwind, so a panic
+  tears the module down instead of raising through it. The engine reports this and refuses further
+  calls; recover by closing it and creating another `Typst`. The other platforms catch panics at
+  the FFI boundary and carry on.
+
+The 40 MB is roughly a quarter fonts. `-Ptypst.wasmEmbedFonts=false` builds the module without
+them — 31 MB, 11 MB gzipped — leaving `TypstConfig.fonts` to supply what the document needs.
+
 ## Why not just wrap `java-typst`?
 
 [`g0ddest/java-typst`](https://github.com/g0ddest/java-typst) solves the same problem for Java, and
@@ -148,8 +208,8 @@ Two further design choices differ:
                             │
         ┌───────────────────┼───────────────────┐
         │                   │                   │
-   jvmCommonMain        nativeMain          (jsMain/wasmJsMain — later)
-   JNI bindings         cinterop
+   jvmCommonMain        nativeMain            webMain
+   JNI bindings         cinterop         Web Worker protocol
         │                   │                   │
  typst-kmp-jni       typst-kmp-cabi       typst-kmp-wasm
    (cdylib)        (staticlib + header)    (wasm-bindgen)
@@ -207,6 +267,15 @@ rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios   # i
 rustup target add x86_64-pc-windows-gnu                                      # mingwX64
 rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
 cargo install cargo-ndk                                                      # Android
+rustup target add wasm32-unknown-unknown                                     # js, wasmJs
+```
+
+The web targets also need `wasm-bindgen-cli`, at **exactly** the version `rust/typst-kmp-wasm`
+pins — the CLI refuses to process a module built by any other, and the build checks this up front
+and tells you which version to fetch:
+
+```bash
+cargo install wasm-bindgen-cli --locked --version 0.2.106
 ```
 
 Android additionally needs the NDK. The build looks for it in this order: `ANDROID_NDK_HOME`,
@@ -223,6 +292,9 @@ cd rust && cargo test          # the Rust core, no Gradle involved
 ./gradlew :typst:jvmTest       # JNI
 ./gradlew :typst:jvmJarTest    # the same suite, loading the library out of the assembled jars
 ./gradlew :typst:linuxX64Test  # cinterop + static linking (mingwX64Test on Windows)
+
+# In a real browser, engine in a Web Worker. Needs Chrome; karma is told where the module is.
+./gradlew :typst:jsBrowserTest :typst:wasmJsBrowserTest
 
 # Instrumented, against a running emulator or device. The ABI filter matters: without it every
 # ABI is built, and only the device's own is ever loaded.
@@ -243,6 +315,7 @@ It then writes the PDF where you can open it:
 | `jvmTest`, `linuxX64Test`, `mingwX64Test`, … | `typst/build/test-artifacts/` |
 | `jvmJarTest` | `typst/build/test-artifacts/jvm-from-jar/` |
 | `connectedAndroidDeviceTest` | `typst/build/outputs/connected_android_test_additional_output/` |
+| `jsBrowserTest`, `wasmJsBrowserTest` | nowhere — a browser has no file system to write to |
 
 `jvmJarTest` runs that same suite a second time, against the assembled jars. `jvmTest` hands the
 loader an absolute path through `typst.kmp.library.path`, so it never walks the resource lookup
@@ -258,6 +331,10 @@ inside an Android instrumentation runner.
 
 Android has no host-test suite on purpose: `commonTest` would flow into it and every one of those
 tests calls `System.loadLibrary`, which a plain JVM cannot satisfy.
+
+The browser suites run under karma in headless Chrome. `karmaWebAssetsConfig` generates the snippet
+that serves the WebAssembly module to the test page at the same relative URL a real page uses, so
+the suite exercises the shipping asset path rather than a shortcut around it.
 
 Gradle drives cargo automatically; `build-logic` maps each Kotlin target to its Rust triple.
 
@@ -309,6 +386,7 @@ Released Windows artifacts are built on CI, whose toolchain hosts MSVC.
 | `rust/typst-kmp-core` | the engine: `World`, VFS, exporters, diagnostics |
 | `rust/typst-kmp-cabi` | `extern "C"` facade plus a cbindgen-generated header, for cinterop |
 | `rust/typst-kmp-jni` | JNI facade for the JVM and Android |
+| `rust/typst-kmp-wasm` | wasm-bindgen facade for the browser, plus the worker script that drives it |
 | `typst` | the published Kotlin Multiplatform library |
 | `typst-android-native` | an AAR that carries nothing but `jniLibs/*.so` — see below |
 | `build-logic` | the Gradle ↔ cargo integration |
@@ -339,8 +417,17 @@ points at a separate `com.android.library` module as the way out.
   instrumented device tests.
 * **watchOS and tvOS are not supported.** Their Rust targets are tier 3 and would need a nightly
   toolchain with `-Z build-std`.
-* **Web (`js`, `wasmJs`) is not implemented yet.** The resolution loop above already handles the
-  asynchrony it needs; what is missing is a `wasm-bindgen` crate and the JS glue.
+* **The web module is fetched, not bundled, and the library cannot place it for you.** Kotlin/JS
+  does not replay a dependency's resources into your distribution, and the API that would — the
+  one Compose Resources uses — is closed to plugins other than Compose. So the module ships as a
+  `webassets` zip and you either unpack it into your distribution or point `webAssetBaseUrl` at a
+  copy you host. See [Web](#web).
+* **Web is browser-only.** Node has no DOM `Worker`, and running the engine on the page's own
+  thread instead would freeze it for the length of every compilation.
+* **Blobs are copied byte by byte on `wasmJs`.** Kotlin/JS gets this free — there a `ByteArray`
+  *is* an `Int8Array` — but Kotlin/Wasm keeps arrays in linear memory and the standard library
+  offers no bulk copy to a typed array. It costs single-digit milliseconds for a PDF; large sets
+  of rendered pages pay more.
 
 ## Licence
 
