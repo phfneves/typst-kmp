@@ -1,0 +1,23 @@
+[package]
+name = "typst-kmp-wasm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "wasm-bindgen facade over typst-kmp-core, used by the js and wasmJs targets of typst-kmp."
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+typst-kmp-core = { path = "../typst-kmp-core", default-features = false }
+# Pinned exactly: wasm-bindgen refuses to run when the CLI and the crate disagree, and a floating
+# version turns that into a build failure that only ever reproduces on someone else's machine.
+# `WasmBindgenTask` checks the installed CLI against this same number.
+wasm-bindgen = "=0.2.106"
+console_error_panic_hook = "0.1"
+
+[features]
+default = ["embed-fonts"]
+embed-fonts = ["typst-kmp-core/embed-fonts"]

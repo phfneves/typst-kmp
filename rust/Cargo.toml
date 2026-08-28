@@ -4,6 +4,7 @@ members = [
     "typst-kmp-core",
     "typst-kmp-cabi",
     "typst-kmp-jni",
+    "typst-kmp-wasm",
 ]
 
 [workspace.package]
