@@ -343,19 +343,39 @@ Useful properties:
 | Property | Effect |
 | --- | --- |
 | `-Ptypst.cargoProfile=dev` | build the Rust crates unoptimised (much faster, much slower output) |
-| `-Ptypst.skipCargo=true` | do not build any Rust at all — type-checks the Kotlin sources on a machine without a toolchain |
+| `-Ptypst.skipCargo=true` | do not build any Rust at all — type-checks the Kotlin sources on a machine without a toolchain (JVM, Android and web; the native targets still need the generated header, see below) |
 | `-Ptypst.prebuiltDir=<dir>` | use native artifacts from `<dir>/<triple>/`, as the CI publish job does |
 | `-Ptypst.androidAbis=x86_64` | build only these Android ABIs instead of all three |
 | `-Ptypst.cargo=<path>` | use a specific cargo binary instead of the one that is found |
 
-Cargo is located automatically: first on `PATH`, then under `CARGO_HOME` (or `~/.cargo`). That
-matters for IDE syncs — a Gradle daemon started before rustup was installed does not inherit the
-shell's `PATH`, and the failure it produces otherwise is an opaque "cannot find the file
-specified".
+Cargo is located automatically: first on `PATH`, then under `CARGO_HOME` (or `~/.cargo`), then in
+the directories the usual package managers install into — `/opt/homebrew/bin`, `/usr/local/bin` and
+`/opt/local/bin` on macOS, `~/.local/bin` and `/usr/local/bin` on Linux, `~/scoop/shims` on
+Windows. That matters for IDE syncs, and on macOS most of all: a Gradle daemon launched from an
+IDE inherits a `PATH` of `/usr/bin:/bin:/usr/sbin:/sbin` and sees none of those locations, so an
+installed toolchain still looks absent. If yours lives somewhere else, put
+
+```properties
+typst.cargo=/path/to/cargo
+```
+
+in `~/.gradle/gradle.properties`, which every build and every sync reads.
 
 Targets whose Rust artifact the current machine could not produce are skipped rather than
 attempted, so an IDE sync on Windows does not try to build an Apple static library. Supplying
 `-Ptypst.prebuiltDir` lifts that restriction, since nothing needs compiling.
+
+Those targets still get a cinterop, though — `nativeMain` is only handed a commonized interop when
+*every* one of its targets carries one — and a cinterop needs the cbindgen-generated
+`rust/typst-kmp-cabi/include/typst_kmp.h`. That header is a build output, written by the cabi
+crate's `build.rs`, so those cinterops are ordered after a cabi build the host *can* run; the
+header is target-independent, and the host's own build is already in the graph. Without that
+ordering they raced it and failed with `'typst_kmp.h' file not found` — which is why a fresh sync
+on macOS, where three of the eight native targets are unbuildable, failed the most reliably.
+
+The same header is why `-Ptypst.skipCargo=true` cannot carry the native targets on a machine that
+has never built the cabi crate: there is nothing to read the ABI out of. The JVM, Android and web
+sources type-check regardless.
 
 ### A note on Windows ABIs
 

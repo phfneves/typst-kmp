@@ -179,8 +179,11 @@ abstract class CargoBuildTask : DefaultTask() {
         } catch (cause: Exception) {
             throw GradleException(
                 "Could not run '${cargoExecutable.get()}'. Install the Rust toolchain from https://rustup.rs " +
-                    "and make sure cargo is on PATH, or point at it with -Ptypst.cargo=<path>." +
+                    "and make sure cargo is on PATH." +
                     (if (abi != null) " Android builds also need 'cargo install cargo-ndk'." else "") +
+                    " If it is installed already, this is an IDE sync that did not inherit your " +
+                    "shell's PATH: put 'typst.cargo=<path to cargo>' in ~/.gradle/gradle.properties, " +
+                    "or pass -Ptypst.cargo=<path> on the command line." +
                     " To type-check the Kotlin sources without a Rust toolchain, build with " +
                     "-Ptypst.skipCargo=true.",
                 cause,

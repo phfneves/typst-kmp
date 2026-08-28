@@ -64,6 +64,27 @@ val hostRustTarget: RustTarget = cargo.hostTriple()?.let(RustTargets::jvmHostFor
 /** JNI shared library for the host, so tests can run against a freshly built Rust crate. */
 val hostJniBuild = cargo.build("typst-kmp-jni", hostRustTarget, RustArtifactKind.DYNAMIC_LIB)
 
+/**
+ * The cabi build that stands in as the source of the cbindgen-generated C header.
+ *
+ * `rust/typst-kmp-cabi/include/typst_kmp.h` is a build output — the crate's `build.rs` writes it —
+ * yet *every* native target's cinterop reads it, including the ones this host cannot build and
+ * which therefore get no cargo task of their own. Nothing ordered those cinterops after a build
+ * that produces the header, so on a fresh clone they raced it and failed with
+ * "'typst_kmp.h' file not found"; on a machine that had built once before, the header left behind
+ * by the previous run hid the problem. macOS is where it always showed, because three of the eight
+ * native targets are unbuildable there.
+ *
+ * The header is target-independent, so any build of the crate will do. Picking the host's own
+ * target means this adds an ordering edge and no work: that build is already in the graph.
+ */
+val cabiHeaderBuild: TaskProvider<CargoBuildTask> = cargo.build(
+    "typst-kmp-cabi",
+    RustTargets.native.firstOrNull { it.triple == hostRustTarget.triple }
+        ?: RustTargets.native.first { it.isBuildableOn(hostFamily) },
+    RustArtifactKind.STATIC_LIB,
+)
+
 kotlin {
     explicitApi()
     jvmToolchain(21)
@@ -199,6 +220,11 @@ kotlin {
         // macOS runner and needs all of them wired up.
         if (!descriptor.isBuildableOn(hostFamily) && !usePrebuiltNatives) {
             logger.info("Skipping the Rust build for '$name': not buildable on a $hostFamily host.")
+            // No archive to link, but the bindings still need the generated header, and nothing
+            // else in this branch would wait for it. See cabiHeaderBuild.
+            tasks.named("cinteropTypst${name.replaceFirstChar { it.uppercase() }}") {
+                dependsOn(cabiHeaderBuild)
+            }
             return@configureEach
         }
 

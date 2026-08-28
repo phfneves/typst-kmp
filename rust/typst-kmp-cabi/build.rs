@@ -21,4 +21,9 @@ fn main() {
 
     println!("cargo:rerun-if-changed=src/lib.rs");
     println!("cargo:rerun-if-changed=cbindgen.toml");
+    // The header this script writes is also watched, so that a cached `target/` cannot leave the
+    // build "fresh" while the header the cinterop reads is gone — deleted by a clean, or simply
+    // never produced on this machine. cbindgen skips the write when the content is unchanged, so
+    // this does not chase its own timestamp into a rebuild on every invocation.
+    println!("cargo:rerun-if-changed=include/typst_kmp.h");
 }

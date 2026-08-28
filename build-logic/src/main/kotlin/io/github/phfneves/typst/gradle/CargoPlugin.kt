@@ -106,15 +106,15 @@ abstract class CargoExtension @Inject constructor(private val project: Project) 
     }
 
     /**
-     * Looks for [name] on PATH, then in rustup's default install location.
+     * Looks for [name] on PATH, then in the directories a toolchain is normally installed into.
      *
      * Falls back to the bare name so the task still runs — and still produces its own install
      * hint — on a machine with no toolchain at all. `wasm-bindgen` is resolved the same way as
      * cargo because `cargo install` puts it in the very same bin directory.
      */
     private fun findExecutable(project: Project, name: String): String {
-        val windows = HostFamily.of(System.getProperty("os.name")) == HostFamily.WINDOWS
-        val executable = if (windows) "$name.exe" else name
+        val host = HostFamily.of(System.getProperty("os.name"))
+        val executable = if (host == HostFamily.WINDOWS) "$name.exe" else name
 
         val onPath = System.getenv("PATH")
             ?.split(File.pathSeparator)
@@ -124,15 +124,44 @@ abstract class CargoExtension @Inject constructor(private val project: Project) 
             ?.firstOrNull { it.isFile }
         if (onPath != null) return onPath.absolutePath
 
-        val cargoHome = System.getenv("CARGO_HOME")?.let(::File)
-            ?: File(System.getProperty("user.home"), ".cargo")
-        val inCargoHome = File(cargoHome, "bin/$executable")
-        if (inCargoHome.isFile) {
-            project.logger.info("Using $name from ${inCargoHome.absolutePath} (not on PATH).")
-            return inCargoHome.absolutePath
+        val found = installRoots(host)
+            .map { File(it, executable) }
+            .firstOrNull { it.isFile }
+        if (found != null) {
+            project.logger.info("Using $name from ${found.absolutePath} (not on PATH).")
+            return found.absolutePath
         }
 
         return executable
+    }
+
+    /**
+     * Bin directories to search after PATH, in order of preference.
+     *
+     * rustup's own comes first, then the package managers people install Rust with instead. The
+     * list is longest on macOS because that is where the stripped PATH bites hardest: a Gradle
+     * daemon launched from an IDE inherits `/usr/bin:/bin:/usr/sbin:/sbin` and none of the
+     * locations below, so a perfectly working toolchain looks absent to the build.
+     */
+    private fun installRoots(host: HostFamily): List<File> {
+        val home = File(System.getProperty("user.home"))
+        val cargoHome = System.getenv("CARGO_HOME")?.let(::File) ?: File(home, ".cargo")
+        val roots = mutableListOf(File(cargoHome, "bin"))
+        when (host) {
+            HostFamily.MAC -> roots += listOf(
+                File("/opt/homebrew/bin"), // Homebrew on Apple silicon
+                File("/usr/local/bin"), // Homebrew on Intel, and manual installs
+                File("/opt/local/bin"), // MacPorts
+            )
+            HostFamily.LINUX -> roots += listOf(
+                File(home, ".local/bin"),
+                File("/usr/local/bin"),
+                File("/usr/bin"),
+            )
+            HostFamily.WINDOWS -> roots += File(home, "scoop/shims")
+            HostFamily.ANY -> Unit
+        }
+        return roots
     }
 
     /**
