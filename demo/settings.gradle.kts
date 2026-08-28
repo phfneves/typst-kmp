@@ -42,3 +42,4 @@ includeBuild("..") {
 include(":composeApp")
 include(":androidApp")
 include(":desktopApp")
+include(":webApp")

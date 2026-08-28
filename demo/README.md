@@ -1,8 +1,8 @@
 # typst-kmp demo
 
-A Compose Multiplatform application that uses the library on Android, on the desktop (JVM) and on
-iOS: you edit a Typst document on one side and watch its pages appear on the other, compiled in the
-same process — no `typst` binary installed, no subprocess, no network.
+A Compose Multiplatform application that uses the library on Android, on the desktop (JVM), on iOS
+and in a browser: you edit a Typst document on one side and watch its pages appear on the other,
+compiled in the same process — no `typst` binary installed, no subprocess, no network.
 
 What it shows:
 
@@ -25,10 +25,11 @@ is also what keeps the non-ASCII path exercised.
 | `androidApp` | Manifest, theme and the `FileProvider`. Not one line of Kotlin |
 | `desktopApp` | `main()`, native packaging, and the host's JNI library jar |
 | `iosApp` | An Xcode project with the SwiftUI shell |
+| `webApp` | `main()`, the page, and the copy that puts the WebAssembly module beside it |
 
-Three application modules exist because AGP 9 no longer allows `com.android.application` together
-with the Kotlin Multiplatform plugin in one module; desktop and iOS follow the same shape so that
-the three entry points look alike.
+Separate application modules exist because AGP 9 no longer allows `com.android.application`
+together with the Kotlin Multiplatform plugin in one module; desktop, iOS and web follow the same
+shape so that every entry point looks alike.
 
 This is a **separate Gradle build**. It depends on `io.github.phfneves:typst-kmp` by its published
 coordinates, exactly as any consumer would, and `includeBuild("..")` in `settings.gradle.kts`
@@ -48,6 +49,9 @@ open `demo/` as its own project; the library comes along as an included build.
   ```
 
 * For iOS: macOS with Xcode.
+* For the browser: the `wasm32-unknown-unknown` Rust target and `wasm-bindgen-cli` at the pinned
+  version (see the root README), plus a WasmGC-capable browser for the `wasmJs` distribution —
+  Chrome 119, Firefox 120, Safari 18.4 or later. The `js` one runs anywhere.
 
 ## Running
 
@@ -63,6 +67,10 @@ happens to prefer.
 # Android, against a running emulator or device. The ABI filter matters: each extra architecture is
 # another full build of the Typst tree.
 ./gradlew -p demo :androidApp:installDebug -Ptypst.androidAbis=x86_64 -Pdemo.androidAbis=x86_64
+
+# Browser. wasmJs is the faster of the two; js runs in anything.
+./gradlew -p demo :webApp:wasmJsBrowserDevelopmentRun
+./gradlew -p demo :webApp:jsBrowserDevelopmentRun
 
 # Type-check everything without touching Rust
 ./gradlew -p demo :desktopApp:assemble -Ptypst.skipCargo=true
@@ -90,3 +98,18 @@ see.
 
 Android needs nothing of the sort: the `typst-kmp-android-native` AAR brings the `jniLibs` in
 transitively.
+
+## The extra copy in the browser
+
+The web targets have the same shape of problem for a different reason. The compiler is a
+WebAssembly module fetched over HTTP, and Kotlin/JS does not replay a dependency's resources into
+your distribution — so something has to put the module beside the page.
+
+`webApp/build.gradle.kts` copies it into `typst-kmp/`, the directory the engine looks in by
+default. A published consumer unpacks the `webassets` zip into the same place, or skips the copy
+entirely and points `TypstConfig.webAssetBaseUrl` at a host of their own; the root README shows
+both. Doing it explicitly here is deliberate — it is the one step the library cannot take on a
+consumer's behalf, so the demo shows it rather than hiding it.
+
+Note the size: 40 MB, around 17 MB over gzip. The dev server sends it uncompressed, so the first
+load is slow and every one after that is cached.

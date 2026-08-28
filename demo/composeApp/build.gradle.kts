@@ -38,6 +38,10 @@ kotlin {
         }
     }
 
+    // Both web targets, matching the library. `:webApp` builds one distribution per target.
+    js(IR) { browser() }
+    wasmJs { browser() }
+
     sourceSets {
         commonMain.dependencies {
             // Substituted for the `:typst` project by demo/settings.gradle.kts, but written the
