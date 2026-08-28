@@ -68,16 +68,24 @@ android {
  * ships one that need not match `ndkVersion`. Otherwise fall back to the NDK that AGP resolves
  * under the SDK, so a local build works with nothing exported by hand.
  *
- * `orElse` keeps the fallback lazy: AGP's provider throws when no NDK is installed, and it is
- * never resolved while an environment variable is present.
+ * `orElse` alone does not make that fallback safe. AGP's provider *throws* when no NDK is
+ * installed rather than reporting no value, and `orElse` only substitutes for the latter. The
+ * configuration cache forces every task input while it stores an entry, so on a machine with no
+ * NDK the throw escapes there — as a serialization error naming `__extraEnvironment__`, in a
+ * build that never asked for Android. Map the throw onto an absent value so the environment
+ * variable is simply left unset, and let cargo-ndk report the missing NDK if and when an Android
+ * build actually runs.
  */
-val ndkPath = providers.environmentVariable("ANDROID_NDK_HOME")
+val agpNdkDirectory = androidComponents.sdkComponents.ndkDirectory
+val ndkPath: Provider<String> = providers.environmentVariable("ANDROID_NDK_HOME")
     .orElse(providers.environmentVariable("ANDROID_NDK_ROOT"))
-    .orElse(androidComponents.sdkComponents.ndkDirectory.map { it.asFile.absolutePath })
+    .orElse(provider { runCatching { agpNdkDirectory.get().asFile.absolutePath }.getOrNull() })
 
 cargo {
     androidMinSdk = libs.versions.android.minSdk.get().toInt()
-    environment.put("ANDROID_NDK_HOME", ndkPath)
+    // putAll, not put: an absent `ndkPath` must leave the map empty rather than make the whole
+    // `environment` property absent, which would fail every cargo build with "no value defined".
+    environment.putAll(ndkPath.map { mapOf("ANDROID_NDK_HOME" to it) }.orElse(emptyMap()))
 }
 
 // Register the cargo builds up front; registering tasks from inside another task's configuration
