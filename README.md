@@ -25,6 +25,17 @@ Typst.create().use { typst ->
 }
 ```
 
+## Demo
+
+[`demo/`](demo/) is a Compose Multiplatform application built on the library: edit a Typst document
+on one side, watch its pages render on the other, export the PDF. It runs on Android, on the
+desktop and on iOS, and it is a separate Gradle build that consumes typst-kmp by its published
+coordinates — so it doubles as a worked example of the installation below.
+
+```bash
+./gradlew -p demo :desktopApp:run
+```
+
 ## Installation
 
 Nothing is published yet — the coordinates below are what the CI publish job produces.
@@ -301,6 +312,7 @@ Released Windows artifacts are built on CI, whose toolchain hosts MSVC.
 | `typst` | the published Kotlin Multiplatform library |
 | `typst-android-native` | an AAR that carries nothing but `jniLibs/*.so` — see below |
 | `build-logic` | the Gradle ↔ cargo integration |
+| `demo` | a Compose Multiplatform app built on the library — a build of its own, see [demo/README.md](demo/README.md) |
 
 `typst-android-native` exists because the AGP Kotlin Multiplatform library plugin
 (`com.android.kotlin.multiplatform.library`) supports neither `jniLibs` nor `packagingOptions` nor
