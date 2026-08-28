@@ -1,4 +1,5 @@
 import io.github.phfneves.typst.gradle.CargoBuildTask
+import io.github.phfneves.typst.gradle.EmbedJsSourceTask
 import io.github.phfneves.typst.gradle.GenerateTypstFixturesTask
 import io.github.phfneves.typst.gradle.HostFamily
 import io.github.phfneves.typst.gradle.RustArtifactKind
@@ -18,6 +19,16 @@ plugins {
 cargo {
     androidMinSdk = libs.versions.android.minSdk.get().toInt()
 }
+
+/**
+ * Subdirectory of the browser distribution the WebAssembly module is published into.
+ *
+ * The engine looks here by default; see the `webAssetBaseUrl` parameter of `TypstConfig`.
+ */
+val WEB_ASSET_DIRECTORY = "typst-kmp"
+
+/** Where the generated karma snippet that serves those assets to the browser suite lands. */
+val karmaConfigDir: Provider<Directory> = layout.buildDirectory.dir("karma.config.d")
 
 /** The machine running this build, used to skip targets it could never produce. */
 val hostFamily: HostFamily = HostFamily.of(providers.systemProperty("os.name").get())
@@ -91,6 +102,32 @@ kotlin {
     linuxArm64()
     mingwX64()
 
+    // Browser only, on both web targets. The engine runs in a Web Worker and reaches its module
+    // over HTTP, neither of which Node offers without shims that would only ever be exercised by
+    // this project's own tests.
+    val karmaConfig = karmaConfigDir.get().asFile
+    js {
+        browser {
+            testTask {
+                useKarma {
+                    useChromeHeadless()
+                    // Serves the WebAssembly module; see karmaWebAssetsConfig below.
+                    useConfigDirectory(karmaConfig)
+                }
+            }
+        }
+    }
+    wasmJs {
+        browser {
+            testTask {
+                useKarma {
+                    useChromeHeadless()
+                    useConfigDirectory(karmaConfig)
+                }
+            }
+        }
+    }
+
     applyDefaultHierarchyTemplate()
 
     sourceSets {
@@ -101,6 +138,16 @@ kotlin {
         jvmMain.get().dependsOn(jvmCommonMain)
         androidMain.get().dependsOn(jvmCommonMain)
 
+        // webMain/webTest group js and wasmJs and come from the default hierarchy template — the
+        // one intermediate set here that did not have to be hand-rolled. The worker protocol lives
+        // there; only the handful of lines that touch a JavaScript value are per target.
+
+        // Everything except web, which has no file system to write the inspectable PDF to.
+        val fileTest = create("fileTest") { dependsOn(commonTest.get()) }
+        jvmTest.get().dependsOn(fileTest)
+        nativeTest.get().dependsOn(fileTest)
+        getByName("androidDeviceTest").dependsOn(fileTest)
+
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
@@ -109,6 +156,12 @@ kotlin {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.kotlinx.serialization.json)
+        }
+        webMain.dependencies {
+            // Typed arrays and the DOM, which Kotlin/Wasm does not carry in its standard library.
+            implementation(libs.kotlinx.browser)
+        }
+        fileTest.dependencies {
             // Writing the end-to-end PDF out is shared code; only the directory is per platform.
             implementation(libs.kotlinx.io.core)
         }
@@ -167,6 +220,127 @@ kotlin {
             dependsOn(cargoTask)
         }
     }
+}
+
+// --- Web: the WebAssembly module and the worker that drives it ---------------------------------
+
+/**
+ * `typst_kmp_wasm.js` plus `typst_kmp_wasm_bg.wasm` — the pair the browser fetches at runtime.
+ *
+ * Unlike every other platform, these are not linked into the artifact the compiler produces: a
+ * WebAssembly module is loaded over HTTP, so they travel as resources and the engine is told where
+ * to find them.
+ */
+val wasmBindgen = cargo.wasmBindgen("typst-kmp-wasm")
+
+/**
+ * The worker script, compiled into the Kotlin sources as a string constant.
+ *
+ * See `EmbedJsSourceTask`: a string can be started as a same-origin worker from a `Blob`, which
+ * means nothing about the worker has to be hosted or resolved by a bundler — and only the module
+ * itself is left needing a URL.
+ */
+val embedWorkerScript = tasks.register<EmbedJsSourceTask>("embedTypstWorkerScript") {
+    source.set(layout.projectDirectory.file("../rust/typst-kmp-wasm/js/typst-kmp-worker.js"))
+    packageName.set("io.github.phfneves.typst.internal")
+    objectName.set("TypstWorkerScript")
+    constantName.set("SOURCE")
+    outputDir.set(layout.buildDirectory.dir("generated/typstWorker/kotlin"))
+}
+
+kotlin.sourceSets.getByName("webMain").kotlin.srcDir(embedWorkerScript)
+
+/**
+ * The module staged under the directory name the engine looks in, ready to be used as a resource
+ * root.
+ *
+ * The nesting is the point: a resource root contributes its *contents*, so the extra level is what
+ * puts the two files at `typst-kmp/…` rather than at the root of the distribution.
+ */
+val stageWebAssets = tasks.register<Sync>("stageWebAssets") {
+    group = "build"
+    description = "Stages the WebAssembly module under $WEB_ASSET_DIRECTORY/."
+    from(wasmBindgen)
+    into(layout.buildDirectory.dir("generated/webAssets/$WEB_ASSET_DIRECTORY"))
+}
+
+/*
+ * Deliberately *not* added to jsMain/wasmJsMain resources.
+ *
+ * That would be the obvious move, and it does nothing useful: Kotlin/JS does not replay a klib's
+ * resources into a consumer's distribution, and the API that would — the one Compose Resources
+ * uses — is explicitly closed to plugins other than Compose. It would only bury a 40 MB copy of
+ * the module inside each published klib, on top of the classifier zip below.
+ *
+ * So the module travels one way only, as `webAssetsZip`, and reaches a page either because the
+ * consumer unpacked it into their distribution or because `TypstConfig.webAssetBaseUrl` points at
+ * a copy they host. This project's own browser suite gets it a third way, straight from the staged
+ * directory; see karmaWebAssetsConfig below.
+ */
+
+/*
+ * Karma serves the browser suite out of a directory of its own and knows nothing about a Kotlin
+ * source set's resources, so the staged assets have to be handed to it explicitly. Generated
+ * rather than checked in because the pattern and the proxy target are absolute paths.
+ */
+val karmaWebAssetsConfig = tasks.register("karmaWebAssetsConfig") {
+    group = "verification"
+    description = "Writes the karma snippet that serves the WebAssembly module to the test page."
+    // Captured into locals: a lambda that reads a build-script property holds a reference to the
+    // script object, which the configuration cache cannot serialise.
+    val assetDirectory = WEB_ASSET_DIRECTORY
+    val stagedRoot = layout.buildDirectory.dir("generated/webAssets")
+        .map { it.asFile.invariantSeparatorsPath }
+    val target = karmaConfigDir.map { it.file("typst-kmp-assets.js") }
+    inputs.property("stagedRoot", stagedRoot)
+    inputs.property("assetDirectory", assetDirectory)
+    outputs.file(target)
+    doLast {
+        // Karma exposes anything it serves under /absolute<path>; the proxy is what puts it at the
+        // same relative URL the engine asks for on a real page.
+        val root = stagedRoot.get()
+        target.get().asFile.writeText(
+            """
+            // Generated by :typst:karmaWebAssetsConfig. Do not edit.
+            config.files.unshift({
+                pattern: '$root/$assetDirectory/**',
+                served: true,
+                included: false,
+                watched: false,
+                nocache: true,
+            });
+            config.proxies['/$assetDirectory/'] = '/absolute$root/$assetDirectory/';
+            // Instantiating a 40 MB module and then typesetting a document takes far longer than a
+            // browser test usually does.
+            config.browserNoActivityTimeout = 300000;
+            config.captureTimeout = 300000;
+
+            """.trimIndent(),
+        )
+    }
+}
+
+tasks.named("jsBrowserTest") { dependsOn(karmaWebAssetsConfig, stageWebAssets) }
+tasks.named("wasmJsBrowserTest") { dependsOn(karmaWebAssetsConfig, stageWebAssets) }
+
+/** The two files as a zip, published beside each web artifact so a consumer can fetch them. */
+val webAssetsZip = tasks.register<Zip>("webAssetsZip") {
+    group = "build"
+    description = "Packages the WebAssembly module for consumers to host themselves."
+    archiveBaseName.set("typst")
+    archiveClassifier.set("webassets")
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
+    from(wasmBindgen)
+    destinationDirectory.set(layout.buildDirectory.dir("libs"))
+}
+
+/*
+ * Attached to both web publications, so `typst-kmp-js` and `typst-kmp-wasm-js` each carry the
+ * module a consumer needs to serve. Same mechanism as the JVM classifier jars below.
+ */
+listOf("js", "wasmJs").forEach { targetName ->
+    kotlin.targets.getByName(targetName).mavenPublication { artifact(webAssetsZip) }
 }
 
 // --- JVM: one jar of classes, one jar per platform's JNI library -------------------------------
