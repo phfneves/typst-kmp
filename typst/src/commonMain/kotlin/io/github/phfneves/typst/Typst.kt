@@ -1,8 +1,10 @@
 package io.github.phfneves.typst
 
+import io.github.phfneves.typst.internal.EngineOptions
 import io.github.phfneves.typst.internal.NativeEngine
 import io.github.phfneves.typst.internal.WireCompileResponse
 import io.github.phfneves.typst.internal.WireMissing
+import io.github.phfneves.typst.internal.createNativeEngine
 import io.github.phfneves.typst.internal.decodeResponse
 import io.github.phfneves.typst.internal.encodeConfig
 import io.github.phfneves.typst.internal.encodeRequest
@@ -133,7 +135,12 @@ public class Typst private constructor(
         /** Creates and initialises an engine. */
         public suspend fun create(config: TypstConfig = TypstConfig()): Typst =
             withContext(Dispatchers.Default) {
-                val engine = NativeEngine(encodeConfig(config))
+                val engine = createNativeEngine(
+                    EngineOptions(
+                        configJson = encodeConfig(config),
+                        webAssetBaseUrl = config.webAssetBaseUrl,
+                    ),
+                )
                 try {
                     config.fonts.forEach { engine.addFont(it) }
                 } catch (error: Throwable) {

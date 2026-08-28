@@ -30,7 +30,7 @@ import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.value
 
 @OptIn(ExperimentalForeignApi::class)
-internal actual class NativeEngine actual constructor(configJson: String) {
+internal actual class NativeEngine private constructor(configJson: String) {
 
     private var handle: CPointer<cnames.structs.TypstKmpEngine>? = memScoped {
         val error = alloc<CPointerVar<ByteVar>>()
@@ -38,7 +38,7 @@ internal actual class NativeEngine actual constructor(configJson: String) {
             ?: fail(error, "Failed to create the native Typst engine.")
     }
 
-    actual fun addFont(bytes: ByteArray): Int = memScoped {
+    actual suspend fun addFont(bytes: ByteArray): Int = memScoped {
         val error = alloc<CPointerVar<ByteVar>>()
         val added = bytes.withBuffer { pointer, length ->
             typst_kmp_engine_add_font(alive(), pointer, length, error.ptr)
@@ -47,7 +47,7 @@ internal actual class NativeEngine actual constructor(configJson: String) {
         added
     }
 
-    actual fun vfsPut(path: String, bytes: ByteArray): Unit = memScoped {
+    actual suspend fun vfsPut(path: String, bytes: ByteArray): Unit = memScoped {
         val error = alloc<CPointerVar<ByteVar>>()
         val status = bytes.withBuffer { pointer, length ->
             typst_kmp_engine_vfs_put(alive(), path, pointer, length, error.ptr)
@@ -55,7 +55,7 @@ internal actual class NativeEngine actual constructor(configJson: String) {
         if (status != 0) fail(error, "Failed to write $path into the virtual file system.")
     }
 
-    actual fun vfsPutPackage(spec: String, archive: ByteArray): Int = memScoped {
+    actual suspend fun vfsPutPackage(spec: String, archive: ByteArray): Int = memScoped {
         val error = alloc<CPointerVar<ByteVar>>()
         val count = archive.withBuffer { pointer, length ->
             typst_kmp_engine_vfs_put_package(alive(), spec, pointer, length, error.ptr)
@@ -64,7 +64,7 @@ internal actual class NativeEngine actual constructor(configJson: String) {
         count
     }
 
-    actual fun compile(requestJson: String): NativeResult {
+    actual suspend fun compile(requestJson: String): NativeResult {
         val result = memScoped {
             val error = alloc<CPointerVar<ByteVar>>()
             typst_kmp_compile(alive(), requestJson, error.ptr)
@@ -102,7 +102,16 @@ internal actual class NativeEngine actual constructor(configJson: String) {
 
     private fun alive(): CPointer<cnames.structs.TypstKmpEngine> =
         handle ?: throw TypstNativeException("The native Typst engine is already closed.")
+
+    internal companion object {
+        fun open(configJson: String): NativeEngine = NativeEngine(configJson)
+    }
 }
+
+/** Nothing here is asynchronous; the archive is linked into this binary. */
+@OptIn(ExperimentalForeignApi::class)
+internal actual suspend fun createNativeEngine(options: EngineOptions): NativeEngine =
+    NativeEngine.open(options.configJson)
 
 /**
  * Pins [this] for the duration of [block], passing a `(pointer, length)` pair.

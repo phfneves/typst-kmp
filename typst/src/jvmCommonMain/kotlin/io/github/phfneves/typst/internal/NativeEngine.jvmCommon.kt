@@ -36,20 +36,20 @@ internal object TypstNative {
     external fun nativeVersion(): String
 }
 
-internal actual class NativeEngine actual constructor(configJson: String) {
+internal actual class NativeEngine private constructor(configJson: String) {
 
     private var handle: Long = TypstNative.engineNew(configJson)
 
-    actual fun addFont(bytes: ByteArray): Int = TypstNative.engineAddFont(alive(), bytes)
+    actual suspend fun addFont(bytes: ByteArray): Int = TypstNative.engineAddFont(alive(), bytes)
 
-    actual fun vfsPut(path: String, bytes: ByteArray) {
+    actual suspend fun vfsPut(path: String, bytes: ByteArray) {
         TypstNative.vfsPut(alive(), path, bytes)
     }
 
-    actual fun vfsPutPackage(spec: String, archive: ByteArray): Int =
+    actual suspend fun vfsPutPackage(spec: String, archive: ByteArray): Int =
         TypstNative.vfsPutPackage(alive(), spec, archive)
 
-    actual fun compile(requestJson: String): NativeResult {
+    actual suspend fun compile(requestJson: String): NativeResult {
         val raw = TypstNative.compile(alive(), requestJson)
         val json = raw[0] as String
 
@@ -70,4 +70,12 @@ internal actual class NativeEngine actual constructor(configJson: String) {
         if (handle == 0L) throw TypstNativeException("The native Typst engine is already closed.")
         return handle
     }
+
+    internal companion object {
+        fun open(configJson: String): NativeEngine = NativeEngine(configJson)
+    }
 }
+
+/** Nothing here is asynchronous; JNI hands the engine back on the calling thread. */
+internal actual suspend fun createNativeEngine(options: EngineOptions): NativeEngine =
+    NativeEngine.open(options.configJson)

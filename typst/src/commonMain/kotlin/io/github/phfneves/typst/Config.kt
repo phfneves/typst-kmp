@@ -22,6 +22,17 @@ public class TypstConfig(
      * of the dependency chain, not the number of files.
      */
     public val maxResolveRounds: Int = 8,
+    /**
+     * Web only: where the WebAssembly module and its glue are served from.
+     *
+     * Ignored on every other platform, which link or load their native library directly.
+     *
+     * The browser needs two files — `typst_kmp_wasm.js` and `typst_kmp_wasm_bg.wasm` — and by
+     * default looks for them in `typst-kmp/` next to the page. Set this when they are hosted
+     * elsewhere, for instance on a CDN; a cross-origin location works as long as it sends CORS
+     * headers. A trailing slash is optional.
+     */
+    public val webAssetBaseUrl: String? = null,
 )
 
 /**
