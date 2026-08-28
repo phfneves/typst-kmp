@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        A platform theme, not a Material Components one: the UI is drawn by Compose, so the only
+        thing Android has to supply is a window without an action bar.
+    -->
+    <style name="Theme.TypstDemo" parent="@android:style/Theme.Material.Light.NoActionBar" />
+</resources>
