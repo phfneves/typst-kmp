@@ -206,3 +206,21 @@ jobs:
           name: android-device-pdf
           path: typst/build/outputs/connected_android_test_additional_output/
           if-no-files-found: error
+
+  demo:
+    name: Demo (compile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      # No Rust toolchain and no cargo-ndk here on purpose. `typst.skipCargo` leaves the native
+      # artifacts out, which is all this job needs: it exists to catch the demo drifting away from
+      # the library's API, and the jobs above are what prove the native side works.
+      - name: Compile the demo against the library
+        run: >
+          ./gradlew -p demo :desktopApp:assemble :androidApp:assembleDebug
+          -Ptypst.skipCargo=true
