@@ -73,7 +73,7 @@ class TypstDemoState(private val scope: CoroutineScope) {
             engine = try {
                 Typst.create()
             } catch (error: Throwable) {
-                fatal = error.message ?: error.toString()
+                fatal = error.describeChain()
                 phase = Phase.Failed
                 return@launch
             }
@@ -163,6 +163,26 @@ class TypstDemoState(private val scope: CoroutineScope) {
     private companion object {
         const val DEBOUNCE_MILLIS = 400L
         const val PREVIEW_PIXEL_PER_PT = 2f
+    }
+}
+
+/**
+ * Every link of the cause chain, one per line.
+ *
+ * A missing JNI library surfaces as `ExceptionInInitializerError`, whose own message is null — the
+ * explanation is one or two causes down, so reporting only the outermost throwable says nothing
+ * more than that something failed.
+ */
+private fun Throwable.describeChain(): String = buildString {
+    var next: Throwable? = this@describeChain
+    var depth = 0
+    while (next != null && depth < 8) {
+        val link: Throwable = next
+        if (depth > 0) append("\n↳ caused by: ")
+        append(link::class.simpleName ?: "Throwable")
+        link.message?.let { append(": ").append(it) }
+        next = link.cause?.takeIf { it !== link }
+        depth++
     }
 }
 
