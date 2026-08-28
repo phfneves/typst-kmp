@@ -28,6 +28,7 @@ jobs:
           - { os: ubuntu-latest,  triple: aarch64-linux-android,      crate: android }
           - { os: ubuntu-latest,  triple: armv7-linux-androideabi,    crate: android }
           - { os: ubuntu-latest,  triple: x86_64-linux-android,       crate: android }
+          - { os: ubuntu-latest,  triple: wasm32-unknown-unknown,     crate: wasm }
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -45,6 +46,12 @@ jobs:
       - name: Install cargo-ndk
         if: matrix.crate == 'android'
         run: cargo install cargo-ndk --locked
+      # Must match the wasm-bindgen crate exactly; read the pin from the crate's own manifest.
+      - name: Install wasm-bindgen-cli
+        if: matrix.crate == 'wasm'
+        run: |
+          version=$(grep -oP 'wasm-bindgen = "=\K[0-9.]+' rust/typst-kmp-wasm/Cargo.toml)
+          cargo install wasm-bindgen-cli --locked --version "$version"
 
       - name: Build
         shell: bash
@@ -54,6 +61,7 @@ jobs:
             both)    pkgs="typst-kmp-cabi typst-kmp-jni" ;;
             cabi)    pkgs="typst-kmp-cabi" ;;
             jni)     pkgs="typst-kmp-jni" ;;
+            wasm)    pkgs="typst-kmp-wasm" ;;
             android) pkgs="" ;;
           esac
           if [ "${{ matrix.crate }}" = "android" ]; then
@@ -71,7 +79,16 @@ jobs:
           find rust/target/${{ matrix.triple }}/release -maxdepth 1 \
             \( -name 'libtypst_kmp_*.a'     -o -name 'typst_kmp_*.lib' \
             -o -name 'libtypst_kmp_*.so'    -o -name 'libtypst_kmp_*.dylib' \
-            -o -name 'typst_kmp_*.dll' \) -exec cp {} staged/${{ matrix.triple }}/ \;
+            -o -name 'typst_kmp_*.dll'      -o -name 'typst_kmp_*.wasm' \) \
+            -exec cp {} staged/${{ matrix.triple }}/ \;
+          # Web needs two things staged: the raw module for the cargo task, and the wasm-bindgen
+          # output — a directory, not one file — for the step that post-processes it. Hence the
+          # nested `bindgen/`, which is where WasmBindgenTask looks.
+          if [ "${{ matrix.crate }}" = "wasm" ]; then
+            wasm-bindgen --target no-modules --no-typescript \
+              --out-dir staged/${{ matrix.triple }}/bindgen --out-name typst_kmp_wasm \
+              rust/target/${{ matrix.triple }}/release/typst_kmp_wasm.wasm
+          fi
           # The generated C header is host-independent; ship it once from the Linux build.
           if [ "${{ matrix.triple }}" = "x86_64-unknown-linux-gnu" ]; then
             mkdir -p staged/include

@@ -24,12 +24,20 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
       - name: Test
         working-directory: rust
         run: cargo test --workspace
+      # typst-kmp-wasm has no tests of its own — it is the same facade as the other two over the
+      # same core — but it is the only crate whose target is not the host's, so nothing else would
+      # notice an upstream dependency losing wasm support.
+      - name: Check the wasm facade
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: rust
+        run: cargo clippy --package typst-kmp-wasm --target wasm32-unknown-unknown -- -D warnings
       - name: Lint
         if: matrix.os == 'ubuntu-latest'
         working-directory: rust
@@ -127,6 +135,36 @@ jobs:
           path: typst/build/test-artifacts/
           if-no-files-found: error
 
+  web:
+    name: Web (browser)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      # The CLI and the wasm-bindgen crate must be the exact same version; WasmBindgenTask checks
+      # it and says so, but pinning here is what keeps the check quiet. Read from the crate's own
+      # manifest so this never drifts from the pin.
+      - name: Install wasm-bindgen-cli
+        run: |
+          version=$(grep -oP 'wasm-bindgen = "=\K[0-9.]+' rust/typst-kmp-wasm/Cargo.toml)
+          echo "Installing wasm-bindgen-cli $version"
+          cargo install wasm-bindgen-cli --locked --version "$version"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      # The same 13-test commonTest suite the other jobs run, this time in a real browser with the
+      # engine in a Web Worker. No PDF is uploaded afterwards: a browser has nowhere to write one,
+      # which is why `writeTestArtifact` returns null on these targets.
+      - name: Run the common suite in Chrome
+        run: ./gradlew :typst:jsBrowserTest :typst:wasmJsBrowserTest
+
   android:
     name: Android (assemble)
     runs-on: ubuntu-latest
@@ -220,7 +258,10 @@ jobs:
       # No Rust toolchain and no cargo-ndk here on purpose. `typst.skipCargo` leaves the native
       # artifacts out, which is all this job needs: it exists to catch the demo drifting away from
       # the library's API, and the jobs above are what prove the native side works.
+      # The web distributions are built too, but only compiled: without a Rust toolchain the
+      # `typst-kmp/` directory they copy in is empty, so they would load but not compile anything.
       - name: Compile the demo against the library
         run: >
           ./gradlew -p demo :desktopApp:assemble :androidApp:assembleDebug
+          :webApp:jsBrowserDistribution :webApp:wasmJsBrowserDistribution
           -Ptypst.skipCargo=true
