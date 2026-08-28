@@ -14,6 +14,7 @@ import platform.Foundation.create
 import platform.Foundation.writeToURL
 import platform.UIKit.UIActivityViewController
 import platform.UIKit.UIApplication
+import platform.UIKit.popoverPresentationController
 
 private class IosPdfExporter : PdfExporter {
 

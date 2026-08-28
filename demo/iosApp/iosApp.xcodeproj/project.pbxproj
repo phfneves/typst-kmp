@@ -203,6 +203,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 2X76664A6D;
 				ENABLE_PREVIEWS = YES;
+				// The Gradle build has no iosX64 target: Compose Multiplatform no longer publishes
+				// for the Intel simulator. Without this, Xcode asks for an architecture the
+				// framework cannot be built for and the Kotlin build phase fails.
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/../composeApp/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
@@ -233,6 +237,10 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
+				// The Gradle build has no iosX64 target: Compose Multiplatform no longer publishes
+				// for the Intel simulator. Without this, Xcode asks for an architecture the
+				// framework cannot be built for and the Kotlin build phase fails.
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/../composeApp/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
