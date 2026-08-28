@@ -25,6 +25,10 @@ val hostFamily: HostFamily = HostFamily.of(providers.systemProperty("os.name").g
 /** True when native artifacts come from `-Ptypst.prebuiltDir`, so cargo never runs. */
 val usePrebuiltNatives: Boolean = providers.gradleProperty("typst.prebuiltDir").isPresent
 
+/** True when `-Ptypst.skipCargo=true` asks for a Kotlin type check with no Rust behind it. */
+val skipCargo: Boolean =
+    providers.gradleProperty("typst.skipCargo").map(String::toBoolean).getOrElse(false)
+
 /**
  * Rust target matching the machine running this build, used for `jvmTest`.
  *
@@ -124,26 +128,36 @@ kotlin {
         val descriptor = RustTargets.byKonanTarget(name)
             ?: error("No Rust target mapped for the Kotlin/Native target '$name'.")
 
-        // Skip targets whose Rust artifact this machine could not produce — otherwise an IDE sync
-        // tries to build an Apple static library on Windows and fails the whole sync.
+        // Every native target declares the interop, including one this machine could never link.
+        // `nativeMain` is only handed a commonized interop when *all* of its targets carry one,
+        // and the source sets exist whether or not the host can build the targets behind them —
+        // so declaring this conditionally left the shared native code without a single C symbol.
+        val cinterop = compilations.getByName("main").cinterops.create("typst") {
+            defFile(project.file("src/nativeInterop/cinterop/typst.def"))
+            includeDirs(layout.projectDirectory.dir("../rust/typst-kmp-cabi/include"))
+        }
+
+        // The archive is the part the host does limit: cargo cannot produce an Apple static
+        // library on Windows. Leaving it out still yields bindings — enough to compile and to
+        // commonize — and only linking a real binary needs the bytes, which is something this
+        // host could not do either way.
         //
-        // The host only limits *cargo*, not Kotlin/Native, so this must not apply when prebuilt
-        // artifacts are supplied: the publish job assembles every target on one macOS runner and
-        // needs all of them wired up.
+        // Prebuilt artifacts lift the restriction: the publish job assembles every target on one
+        // macOS runner and needs all of them wired up.
         if (!descriptor.isBuildableOn(hostFamily) && !usePrebuiltNatives) {
             logger.info("Skipping the Rust build for '$name': not buildable on a $hostFamily host.")
             return@configureEach
         }
 
         val cargoTask = cargo.build("typst-kmp-cabi", descriptor, RustArtifactKind.STATIC_LIB)
-        val headerDir = layout.projectDirectory.dir("../rust/typst-kmp-cabi/include")
-        val libraryDir = cargoTask.flatMap { it.outputDir }
 
-        compilations.getByName("main").cinterops.create("typst") {
-            defFile(project.file("src/nativeInterop/cinterop/typst.def"))
-            includeDirs(headerDir)
-            extraOpts(
-                "-libraryPath", libraryDir.get().asFile.absolutePath,
+        // `-staticLibrary` copies the archive into the klib, so naming one that cargo was told
+        // not to build fails the interop outright — and `typst.skipCargo` exists precisely to
+        // type-check Kotlin on a machine with no Rust toolchain. Bindings alone get that far;
+        // linking a binary is what the missing archive would cost, and this flag never links one.
+        if (!skipCargo) {
+            cinterop.extraOpts(
+                "-libraryPath", cargoTask.flatMap { it.outputDir }.get().asFile.absolutePath,
                 "-staticLibrary", descriptor.staticLibFileName("typst-kmp-cabi"),
             )
         }
