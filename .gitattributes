@@ -1,0 +1,22 @@
+# The Gradle wrappers are shell scripts that macOS and Linux execute directly — including from
+# the iosApp Xcode project's "Compile Kotlin Framework" phase. A CRLF in the shebang makes
+# /bin/sh report "bad interpreter", so pin them to LF regardless of the checkout's core.autocrlf.
+# (The executable bit is not settable here; it lives in the index — see `git update-index --chmod`.)
+gradlew text eol=lf
+*.sh text eol=lf
+
+# Their Windows counterparts need the opposite.
+*.bat text eol=crlf
+
+# Never let end-of-line conversion near a binary.
+*.jar binary
+*.wasm binary
+*.png binary
+*.pdf binary
+*.ttf binary
+*.otf binary
+*.a binary
+*.so binary
+*.dylib binary
+*.dll binary
+*.lib binary
