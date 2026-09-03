@@ -1,0 +1,12 @@
+headers = typst_kmp.h
+package = io.github.phfneves.typst.cinterop
+
+# The static archive itself and its search path are supplied per target from Gradle
+# (see the `cinterops` block in build.gradle.kts), because they live under build/.
+#
+# System libraries the Rust standard library needs are declared here instead, so that they are
+# recorded in the klib manifest and consumers link correctly without extra configuration.
+# There is deliberately no TLS/HTTP stack in the Rust crate, which is why Apple targets need no
+# Security or SystemConfiguration framework.
+linkerOpts.linux = -lm -ldl -lpthread
+linkerOpts.mingw = -lws2_32 -luserenv -lbcrypt -lntdll -ladvapi32 -lkernel32

@@ -1,0 +1,27 @@
+[package]
+name = "typst-kmp-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Platform-agnostic Typst compilation engine behind the typst-kmp bindings."
+
+[dependencies]
+typst.workspace = true
+typst-pdf.workspace = true
+typst-svg.workspace = true
+typst-render.workspace = true
+typst-eval.workspace = true
+typst-layout.workspace = true
+typst-assets = { workspace = true, optional = true }
+serde.workspace = true
+serde_json.workspace = true
+flate2.workspace = true
+tar.workspace = true
+
+[features]
+default = ["embed-fonts"]
+# Embeds the typst-assets font bundle (DejaVu Sans Mono, Libertinus Serif, New Computer Modern).
+# Costs roughly 10 MB per platform artifact; turn it off and supply fonts from Kotlin instead.
+embed-fonts = ["dep:typst-assets"]

@@ -1,0 +1,22 @@
+[package]
+name = "typst-kmp-cabi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "C ABI facade over typst-kmp-core, consumed by Kotlin/Native through cinterop."
+
+[lib]
+# `staticlib` is what cinterop embeds into the klib; `cdylib` is handy for local experiments.
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+typst-kmp-core = { path = "../typst-kmp-core", default-features = false }
+
+[build-dependencies]
+cbindgen = "0.29"
+
+[features]
+default = ["embed-fonts"]
+embed-fonts = ["typst-kmp-core/embed-fonts"]

@@ -1,0 +1,19 @@
+[package]
+name = "typst-kmp-jni"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "JNI facade over typst-kmp-core, used by the JVM and Android targets of typst-kmp."
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+typst-kmp-core = { path = "../typst-kmp-core", default-features = false }
+jni = "0.21"
+
+[features]
+default = ["embed-fonts"]
+embed-fonts = ["typst-kmp-core/embed-fonts"]

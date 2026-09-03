@@ -9,5 +9,22 @@ captures
 local.properties
 xcuserdata
 .kotlin
+
+# Rust
+rust/target/
+**/*.rs.bk
+
+# Native build outputs (produced by cargo, never committed)
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.lib
+*.pdb
+typst/src/nativeInterop/cinterop/generated/
+rust/typst-kmp-cabi/include/
+typst-android-native/src/main/jniLibs/
+
 #So we don't accidentally commit our private keys
 *.gpg
