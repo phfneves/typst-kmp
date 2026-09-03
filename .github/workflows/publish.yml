@@ -4,8 +4,21 @@ on:
   release:
     types: [ released, prereleased ]
   workflow_dispatch:
+    inputs:
+      version:
+        description: The version to publish, without a leading "v".
+        required: true
+        type: string
 
 jobs:
+  # The full test suite, as its own gate. Deliberately not a `needs` of the native matrix: the two
+  # are independent, so they run side by side and only the publish below waits for both. Nothing
+  # reaches Maven Central if a test fails, and a failure is reported far sooner than if the matrix
+  # had to finish first.
+  verify:
+    name: Verify
+    uses: ./.github/workflows/gradle.yml
+
   # Each runner can only build the Rust targets its own toolchain supports, so the native
   # artifacts are produced here and handed to a single publish job below. Without this split it
   # would be impossible to publish every klib and every JVM platform from one machine.
@@ -104,11 +117,20 @@ jobs:
 
   publish:
     name: Publish to Maven Central
-    needs: natives
+    needs: [ verify, natives ]
     # Apple klibs can only be produced on a macOS host, even with prebuilt Rust archives.
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      # The build falls back to 0.1.0-SNAPSHOT when nothing pins the version, which would quietly
+      # route a release to the snapshot repository. Fail loudly instead when there is no version to
+      # publish, and strip the tag's leading "v" so the coordinates read 1.2.3, not v1.2.3.
+      - name: Resolve the version
+        run: |
+          version="${{ github.event.release.tag_name || inputs.version }}"
+          [ -n "$version" ] || { echo "no version: run this from a release or pass one"; exit 1; }
+          echo "TYPST_VERSION=${version#v}" >> "$GITHUB_ENV"
+          echo "Publishing ${version#v}"
       - uses: actions/download-artifact@v4
         with:
           path: prebuilt-raw
@@ -122,15 +144,41 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      # The macOS runner images carry no Android SDK, unlike the Linux ones every Android job in
+      # gradle.yml runs on — and this job publishes the AAR and the Android klib along with
+      # everything else.
+      - uses: android-actions/setup-android@v3
+      # `-Ptypst.prebuiltDir` keeps cargo from running, but AGP still strips the packaged .so files
+      # with the NDK's own tools, so :typst-android-native needs one present. Read the pin from the
+      # version catalog so this never drifts from the `ndkVersion` that module declares. sed rather
+      # than `grep -oP`: this step runs on macOS, whose BSD grep has no -P.
+      - name: Install the NDK
+        run: |
+          ndk=$(sed -n 's/^android-ndk = "\(.*\)"/\1/p' gradle/libs.versions.toml)
+          [ -n "$ndk" ] || { echo "no android-ndk pin in gradle/libs.versions.toml"; exit 1; }
+          echo "Installing NDK $ndk"
+          sdkmanager "ndk;$ndk"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$ndk" >> "$GITHUB_ENV"
       - uses: gradle/actions/setup-gradle@v4
-      - name: Assemble the JVM jars
+      # Everything the release contains, staged in the local repository first, which is what lets
+      # the two checks below inspect the very files that go to Central under the coordinates a
+      # consumer resolves — rather than guess at internal build layout. The publish at the end
+      # finds all of it up to date, so staging costs one signing pass and a copy.
+      #
+      # It needs the signing key for the same reason: a release version is signed, so this also
+      # proves the key works before a single byte reaches Central.
+      - name: Stage every publication locally
         run: >
-          ./gradlew :typst:jvmJar :typst:jvmNativeJars
+          ./gradlew publishToMavenLocal
+          "-Ptypst.version=$TYPST_VERSION"
           "-Ptypst.prebuiltDir=${{ github.workspace }}/prebuilt-raw"
           --no-configuration-cache
+        env:
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_KEY_CONTENTS }}
       # Guards the one failure mode the per-PR check cannot see: a release whose classifier jars
-      # cover only some platforms, because a native artifact never made it out of its runner. The
-      # publish below finds these jars up to date, so assembling them here costs nothing.
+      # cover only some platforms, because a native artifact never made it out of its runner.
       - name: Verify every platform is packaged
         run: |
           libs=typst/build/libs
@@ -146,9 +194,30 @@ jobs:
               || { echo "the 'all' jar does not carry $platform"; exit 1; }
             echo "ok: $platform"
           done
+      # The Kotlin/Native counterpart, and the sharper of the two checks.
+      #
+      # When a target's cinterop cannot be processed on the host, Kotlin does not fail: it prints
+      # "cross compilation to target 'x' has been disabled because it contains cinterops" and
+      # carries on, publishing that target without the interop klib. A consumer would resolve a
+      # klib with no Typst symbols in it. Nothing else in this pipeline would notice, so the
+      # per-target `-cinterop-typst.klib` is what has to be asserted, not just the main klib.
+      - name: Verify every Kotlin/Native target is packaged
+        run: |
+          repo="$HOME/.m2/repository/io/github/phfneves"
+          for target in iosarm64 iossimulatorarm64 iosx64 macosarm64 macosx64 \
+                        linuxx64 linuxarm64 mingwx64; do
+            base="$repo/typst-kmp-$target/$TYPST_VERSION/typst-kmp-$target-$TYPST_VERSION"
+            [ -f "$base.klib" ] || { echo "no klib published for $target"; exit 1; }
+            [ -f "$base-cinterop-typst.klib" ] || {
+              echo "$target has no cinterop klib: cross compilation was disabled for it"
+              exit 1
+            }
+            echo "ok: $target ($(du -h "$base.klib" | cut -f1))"
+          done
       - name: Publish
         run: >
           ./gradlew publishToMavenCentral
+          "-Ptypst.version=$TYPST_VERSION"
           "-Ptypst.prebuiltDir=${{ github.workspace }}/prebuilt-raw"
           --no-configuration-cache
         env:
