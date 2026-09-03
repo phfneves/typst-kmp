@@ -55,25 +55,32 @@ jobs:
           # jvmJarTest runs the same suite against the assembled jars, so the resource lookup the
           # published artifacts rely on is exercised too. Windows is where a classifier or library
           # naming bug would hide, so it runs there as well.
+          # `artifact` is the job name as an upload-artifact name: that API rejects a slash, and
+          # expressions have no replace() to derive one from `name`.
           - name: JVM (Linux)
+            artifact: jvm-linux
             os: ubuntu-latest
             rust-targets: x86_64-unknown-linux-gnu
             tasks: :typst:jvmTest :typst:jvmJarTest :typst:jvmNativeJars
             native-classifier: linux-x86_64
             native-library: libtypst_kmp_jni.so
           - name: JVM (Windows)
+            artifact: jvm-windows
             os: windows-latest
             rust-targets: x86_64-pc-windows-msvc
             tasks: :typst:jvmTest :typst:jvmJarTest
           - name: Kotlin/Native (Linux)
+            artifact: native-linux
             os: ubuntu-latest
             rust-targets: x86_64-unknown-linux-gnu
             tasks: :typst:linuxX64Test
           - name: Kotlin/Native (Windows)
+            artifact: native-windows
             os: windows-latest
             rust-targets: x86_64-pc-windows-gnu
             tasks: :typst:mingwX64Test
           - name: Kotlin/Native (Apple)
+            artifact: native-apple
             os: macos-latest
             rust-targets: aarch64-apple-darwin,aarch64-apple-ios-sim
             tasks: :typst:macosArm64Test :typst:iosSimulatorArm64Test
@@ -128,12 +135,17 @@ jobs:
           done
       # Each suite compiles src/commonTest/typst/report.typ and writes the PDF here, so a failure
       # can be looked at rather than guessed at.
+      #
+      # Still `always()`, because a PDF left behind by a failing run is exactly what this is for.
+      # But the strictness has to follow the job: on a green run a missing PDF means the artifact
+      # mechanism broke and should fail; on a red one it usually just means the suite never got
+      # that far, and erroring buries the failure that matters under an upload error of its own.
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: pdf-${{ matrix.name }}
+          name: pdf-${{ matrix.artifact }}
           path: typst/build/test-artifacts/
-          if-no-files-found: error
+          if-no-files-found: ${{ job.status == 'success' && 'error' || 'warn' }}
 
   web:
     name: Web (browser)
