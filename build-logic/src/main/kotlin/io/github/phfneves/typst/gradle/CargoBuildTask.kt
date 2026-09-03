@@ -89,6 +89,16 @@ abstract class CargoBuildTask : DefaultTask() {
     @get:Internal
     abstract val prebuiltDir: DirectoryProperty
 
+    /**
+     * Directory `build.rs` generates headers into, `<workspace>/<crate>/include` by convention.
+     *
+     * `@Internal`, because it is neither an input nor where anything downstream reads: the copy
+     * staged under [outputDir] is. Only the cabi crate generates anything here; for the others the
+     * directory never exists and nothing is staged.
+     */
+    @get:Internal
+    abstract val generatedIncludeDir: DirectoryProperty
+
     /** True when [prebuiltDir] points at an existing directory for this Rust target. */
     @get:Input
     abstract val usePrebuilt: Property<Boolean>
@@ -129,11 +139,34 @@ abstract class CargoBuildTask : DefaultTask() {
                     "The resulting artifacts will not contain a native library.",
             )
             outputDir.get().asFile.mkdirs()
+            stageHeaders(generatedIncludeDir.orNull?.asFile)
             return
         }
 
         runCargo(target, crate)
         collectArtifact(target, artifactName)
+        stageHeaders(generatedIncludeDir.orNull?.asFile)
+    }
+
+    /**
+     * Copies a generated header directory into [outputDir], so the build cache carries it.
+     *
+     * `build.rs` writes the cbindgen header into the crate's own source tree, which is gitignored
+     * and therefore absent from a fresh checkout. It was no declared output of this task, so when
+     * the build cache served [outputDir] the header was never restored and cargo never ran to
+     * write it — leaving every cinterop to fail with "'typst_kmp.h' file not found" on precisely
+     * the runs that hit the cache, and to succeed everywhere the cache was cold. Staging it under
+     * [outputDir] is what makes it part of what the cache stores and restores.
+     *
+     * Silent when there is nothing to stage: only the cabi crate generates headers.
+     */
+    private fun stageHeaders(source: java.io.File?) {
+        if (source == null || !source.isDirectory) return
+        val destination = outputDir.get().asFile.resolve("include")
+        fsOps.sync {
+            from(source)
+            into(destination)
+        }
     }
 
     private fun copyPrebuilt(target: String, artifactName: String) {
@@ -147,6 +180,9 @@ abstract class CargoBuildTask : DefaultTask() {
         val destination = outputDir.get().asFile
         destination.mkdirs()
         source.copyTo(destination.resolve(artifactName), overwrite = true)
+        // The publish job stages the header once, next to the per-triple directories, because it
+        // is target-independent and only one runner's build produces it.
+        stageHeaders(prebuiltDir.get().asFile.resolve("include"))
         logger.lifecycle("Using prebuilt $artifactName for $target")
     }
 

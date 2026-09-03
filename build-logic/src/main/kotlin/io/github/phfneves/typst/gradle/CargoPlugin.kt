@@ -311,6 +311,7 @@ abstract class CargoExtension @Inject constructor(private val project: Project) 
 
             rustSources.from(sources)
             outputDir.set(output)
+            generatedIncludeDir.set(workspace.dir("$crate/include"))
         }
         return provider
     }

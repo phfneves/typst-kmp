@@ -206,9 +206,12 @@ kotlin {
         // `nativeMain` is only handed a commonized interop when *all* of its targets carry one,
         // and the source sets exist whether or not the host can build the targets behind them —
         // so declaring this conditionally left the shared native code without a single C symbol.
+        // The header comes from cabiHeaderBuild's staged output, never from the crate's source
+        // tree: that copy is gitignored, so a fresh checkout only has one if cargo actually ran —
+        // which a build-cache hit skips. See CargoBuildTask.stageHeaders.
         val cinterop = compilations.getByName("main").cinterops.create("typst") {
             defFile(project.file("src/nativeInterop/cinterop/typst.def"))
-            includeDirs(layout.projectDirectory.dir("../rust/typst-kmp-cabi/include"))
+            includeDirs(cabiHeaderBuild.flatMap { it.outputDir }.get().asFile.resolve("include"))
         }
 
         // The archive is the part the host does limit: cargo cannot produce an Apple static
@@ -241,9 +244,12 @@ kotlin {
             )
         }
 
-        // cinterop needs both the generated header and the archive to exist first.
+        // cinterop needs both the generated header and the archive to exist first. The header
+        // comes from cabiHeaderBuild even here, where this target's own cargo build would also
+        // produce one: pointing every target at a single staged copy is what keeps includeDirs
+        // above target-independent. When the two are the same task, this edge is a no-op.
         tasks.named("cinteropTypst${name.replaceFirstChar { it.uppercase() }}") {
-            dependsOn(cargoTask)
+            dependsOn(cargoTask, cabiHeaderBuild)
         }
     }
 }
