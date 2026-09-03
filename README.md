@@ -4,12 +4,16 @@ The [Typst](https://typst.app) typesetting compiler as a Kotlin Multiplatform li
 binary to install, no subprocess, no server round-trip. The compiler is embedded and runs in
 process on Android, the JVM, iOS, macOS, Linux, Windows and in the browser.
 
-> **Status: work in progress.** The same 13-test `commonTest` suite runs green on the JVM (JNI),
-> on Kotlin/Native (cinterop), on an Android emulator (instrumented) and in a browser on both
-> `js` and `wasmJs` (wasm-bindgen), on top of 15 Rust tests. Each run compiles a real multi-page
-> document and — everywhere but the browser, which has nowhere to write one — leaves the PDF for
-> inspection. Apple and Linux targets are configured but have only ever been built by CI, and
-> nothing has been published.
+> **Status: alpha.** `0.1.0-alpha01` is the first published build; the API may still change.
+> The same 13-test `commonTest` suite runs green on the JVM (JNI), on Kotlin/Native (cinterop),
+> on an Android emulator (instrumented) and in a browser on both `js` and `wasmJs`
+> (wasm-bindgen), on top of 15 Rust tests. Each run compiles a real multi-page document and —
+> everywhere but the browser, which has nowhere to write one — leaves the PDF for inspection.
+>
+> Some targets are packaged without ever having run the suite: `iosArm64` on a real device,
+> `iosX64`, `macosX64`, `linuxArm64`, the Android `arm64-v8a` and `armeabi-v7a` libraries (their
+> JNI entry points are checked, but no test executes on those ABIs) and the JVM classifier jars
+> for macOS and Linux arm64. If you are on one of those, you are the first.
 
 ```kotlin
 Typst.create().use { typst ->
@@ -41,7 +45,8 @@ published coordinates — so it doubles as a worked example of the installation 
 
 ## Installation
 
-Nothing is published yet — the coordinates below are what the CI publish job produces.
+Published on Maven Central. The examples below pin `0.1.0-alpha01`; check
+[Releases](https://github.com/phfneves/typst-kmp/releases) for the current version.
 
 ```kotlin
 repositories { mavenCentral() }
@@ -57,11 +62,11 @@ native jar is always one explicit extra line — nothing infers it for you.
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.phfneves:typst-kmp:<version>")
+            implementation("io.github.phfneves:typst-kmp:0.1.0-alpha01")
         }
         jvmMain.dependencies {
             // Pick the classifier matching where the JVM will run.
-            runtimeOnly("io.github.phfneves:typst-kmp-jvm:<version>:linux-x86_64")
+            runtimeOnly("io.github.phfneves:typst-kmp-jvm:0.1.0-alpha01:linux-x86_64")
         }
     }
 }
@@ -70,8 +75,8 @@ kotlin {
 ```kotlin
 // Plain JVM
 dependencies {
-    implementation("io.github.phfneves:typst-kmp-jvm:<version>")
-    runtimeOnly("io.github.phfneves:typst-kmp-jvm:<version>:linux-x86_64")
+    implementation("io.github.phfneves:typst-kmp-jvm:0.1.0-alpha01")
+    runtimeOnly("io.github.phfneves:typst-kmp-jvm:0.1.0-alpha01:linux-x86_64")
 }
 ```
 
@@ -80,12 +85,12 @@ dependencies {
 <dependency>
   <groupId>io.github.phfneves</groupId>
   <artifactId>typst-kmp-jvm</artifactId>
-  <version>${typst.version}</version>
+  <version>0.1.0-alpha01</version>
 </dependency>
 <dependency>
   <groupId>io.github.phfneves</groupId>
   <artifactId>typst-kmp-jvm</artifactId>
-  <version>${typst.version}</version>
+  <version>0.1.0-alpha01</version>
   <classifier>linux-x86_64</classifier>
   <scope>runtime</scope>
 </dependency>
@@ -153,7 +158,7 @@ one. Unzip it into your distribution at `typst-kmp/`, which is where the engine 
 // Gradle: unpack the module into the browser distribution.
 val typstWebAssets by configurations.creating
 dependencies {
-    typstWebAssets("io.github.phfneves:typst-kmp-js:<version>:webassets@zip")
+    typstWebAssets("io.github.phfneves:typst-kmp-js:0.1.0-alpha01:webassets@zip")
 }
 val unpackTypst by tasks.registering(Copy::class) {
     from(typstWebAssets.map { zipTree(it) })
