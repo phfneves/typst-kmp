@@ -20,7 +20,7 @@ plugins {
 /*
  * Which ABIs to build.
  *
- * All three by default. `-Ptypst.androidAbis=x86_64` narrows it, which matters for the
+ * All four by default. `-Ptypst.androidAbis=x86_64` narrows it, which matters for the
  * instrumented-test job: an emulator only ever loads its own ABI, and each extra one is a full
  * rebuild of the Typst tree for another triple.
  */

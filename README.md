@@ -11,9 +11,9 @@ process on Android, the JVM, iOS, macOS, Linux, Windows and in the browser.
 > everywhere but the browser, which has nowhere to write one — leaves the PDF for inspection.
 >
 > Some targets are packaged without ever having run the suite: `iosArm64` on a real device,
-> `iosX64`, `macosX64`, `linuxArm64`, the Android `arm64-v8a` and `armeabi-v7a` libraries (their
-> JNI entry points are checked, but no test executes on those ABIs) and the JVM classifier jars
-> for macOS and Linux arm64. If you are on one of those, you are the first.
+> `iosX64`, `macosX64`, `linuxArm64`, the Android `arm64-v8a`, `armeabi-v7a` and `x86` libraries
+> (their JNI entry points are checked, but no test executes on those ABIs) and the JVM classifier
+> jars for macOS and Linux arm64. If you are on one of those, you are the first.
 
 ```kotlin
 Typst.create().use { typst ->
@@ -109,11 +109,12 @@ alongside the page — see [Web](#web).
 | `macos-x86_64` | `libtypst_kmp_jni.dylib` |
 | `macos-aarch64` | `libtypst_kmp_jni.dylib` |
 | `windows-x86_64` | `typst_kmp_jni.dll` |
+| `windows-aarch64` | `typst_kmp_jni.dll` |
 | `all` | every one of the above, in a single ~200 MB jar |
 
 Use `all` only when one build has to run everywhere — a desktop application shipped as a single
 cross-platform bundle. For anything that knows its own target, a single classifier keeps the
-download to one library instead of five.
+download to one library instead of six.
 
 To resolve the classifier for the machine running the build:
 
@@ -126,7 +127,7 @@ val classifier = run {
         else -> error("Unsupported architecture")
     }
     when {
-        os.startsWith("windows") -> "windows-x86_64"
+        os.startsWith("windows") -> "windows-$arch"
         os.startsWith("mac") -> "macos-$arch"
         else -> "linux-$arch"
     }
@@ -270,7 +271,8 @@ You need the [Rust toolchain](https://rustup.rs) on `PATH`, plus the targets you
 ```bash
 rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios   # iOS
 rustup target add x86_64-pc-windows-gnu                                      # mingwX64
-rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android \
+                  i686-linux-android
 cargo install cargo-ndk                                                      # Android
 rustup target add wasm32-unknown-unknown                                     # js, wasmJs
 ```
@@ -350,7 +352,7 @@ Useful properties:
 | `-Ptypst.cargoProfile=dev` | build the Rust crates unoptimised (much faster, much slower output) |
 | `-Ptypst.skipCargo=true` | do not build any Rust at all — type-checks the Kotlin sources on a machine without a toolchain (JVM, Android and web; the native targets still need the generated header, see below) |
 | `-Ptypst.prebuiltDir=<dir>` | use native artifacts from `<dir>/<triple>/`, as the CI publish job does |
-| `-Ptypst.androidAbis=x86_64` | build only these Android ABIs instead of all three |
+| `-Ptypst.androidAbis=x86_64` | build only these Android ABIs instead of all four |
 | `-Ptypst.cargo=<path>` | use a specific cargo binary instead of the one that is found |
 
 Cargo is located automatically: first on `PATH`, then under `CARGO_HOME` (or `~/.cargo`), then in

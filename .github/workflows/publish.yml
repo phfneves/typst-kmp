@@ -38,9 +38,11 @@ jobs:
           - { os: macos-latest,   triple: x86_64-apple-ios,           crate: cabi }
           - { os: windows-latest, triple: x86_64-pc-windows-msvc,     crate: jni }
           - { os: windows-latest, triple: x86_64-pc-windows-gnu,      crate: cabi }
+          - { os: windows-11-arm, triple: aarch64-pc-windows-msvc,    crate: jni }
           - { os: ubuntu-latest,  triple: aarch64-linux-android,      crate: android }
           - { os: ubuntu-latest,  triple: armv7-linux-androideabi,    crate: android }
           - { os: ubuntu-latest,  triple: x86_64-linux-android,       crate: android }
+          - { os: ubuntu-latest,  triple: i686-linux-android,         crate: android }
           - { os: ubuntu-latest,  triple: wasm32-unknown-unknown,     crate: wasm }
     steps:
       - uses: actions/checkout@v4
@@ -185,7 +187,8 @@ jobs:
           prefix=io/github/phfneves/typst/native
           all=$(find "$libs" -maxdepth 1 -name 'typst-jvm-*-all.jar')
           [ -f "$all" ] || { echo "no 'all' jar was built"; exit 1; }
-          for platform in linux-x86_64 linux-aarch64 macos-x86_64 macos-aarch64 windows-x86_64; do
+          for platform in linux-x86_64 linux-aarch64 macos-x86_64 macos-aarch64 \
+                          windows-x86_64 windows-aarch64; do
             jar=$(find "$libs" -maxdepth 1 -name "typst-jvm-*-$platform.jar")
             [ -f "$jar" ] || { echo "no classifier jar for $platform"; exit 1; }
             unzip -Z1 "$jar" | grep -q "^$prefix/$platform/[^/]" \

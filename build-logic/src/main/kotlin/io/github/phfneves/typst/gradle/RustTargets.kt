@@ -133,6 +133,9 @@ object RustTargets {
 
     val windowsX64Msvc = RustTarget("x86_64-pc-windows-msvc", jvmPlatformId = "windows-x86_64")
 
+    /** Windows on ARM. JVM only: Kotlin/Native has no `mingwArm64` target. */
+    val windowsArm64Msvc = RustTarget("aarch64-pc-windows-msvc", jvmPlatformId = "windows-aarch64")
+
     /**
      * The GNU-ABI alternative for the Windows JVM library.
      *
@@ -148,6 +151,7 @@ object RustTargets {
     val androidArm64 = RustTarget("aarch64-linux-android", androidAbi = "arm64-v8a")
     val androidArm32 = RustTarget("armv7-linux-androideabi", androidAbi = "armeabi-v7a")
     val androidX64 = RustTarget("x86_64-linux-android", androidAbi = "x86_64")
+    val androidX86 = RustTarget("i686-linux-android", androidAbi = "x86")
 
     // --- Web (a WebAssembly module post-processed by wasm-bindgen) -----------------------------
 
@@ -162,11 +166,11 @@ object RustTargets {
 
     /** Targets whose shared library is packaged into the JVM jars. */
     val jvm: List<RustTarget> = listOf(
-        linuxX64, linuxArm64, macosX64, macosArm64, windowsX64Msvc,
+        linuxX64, linuxArm64, macosX64, macosArm64, windowsX64Msvc, windowsArm64Msvc,
     )
 
     /** Targets whose shared library is packaged into the Android AAR. */
-    val android: List<RustTarget> = listOf(androidArm64, androidArm32, androidX64)
+    val android: List<RustTarget> = listOf(androidArm64, androidArm32, androidX64, androidX86)
 
     fun byKonanTarget(name: String): RustTarget? = native.firstOrNull { it.konanTarget == name }
 

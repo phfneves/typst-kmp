@@ -69,6 +69,11 @@ jobs:
             os: windows-latest
             rust-targets: x86_64-pc-windows-msvc
             tasks: :typst:jvmTest :typst:jvmJarTest
+          - name: JVM (Windows ARM64)
+            artifact: jvm-windows-arm64
+            os: windows-11-arm
+            rust-targets: aarch64-pc-windows-msvc
+            tasks: :typst:jvmTest :typst:jvmJarTest
           - name: Kotlin/Native (Linux)
             artifact: native-linux
             os: ubuntu-latest
@@ -184,7 +189,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
@@ -208,7 +213,7 @@ jobs:
         run: |
           aar=typst-android-native/build/outputs/aar/typst-android-native-release.aar
           unzip -o -q "$aar" 'jni/*' -d aar-check
-          for abi in arm64-v8a armeabi-v7a x86_64; do
+          for abi in arm64-v8a armeabi-v7a x86_64 x86; do
             so="aar-check/jni/$abi/libtypst_kmp_jni.so"
             [ -f "$so" ] || { echo "missing $abi in $aar"; exit 1; }
             grep -aq 'Java_io_github_phfneves_typst_internal_TypstNative_compile' "$so" \
@@ -223,7 +228,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          # Only the emulator's own ABI is needed here; the `android` job covers the other two.
+          # Only the emulator's own ABI is needed here; the `android` job covers the other three.
           targets: x86_64-linux-android
       - uses: Swatinem/rust-cache@v2
         with:
@@ -246,7 +251,7 @@ jobs:
           api-level: 34
           arch: x86_64
           target: google_apis
-          # Only the emulator's ABI, so the job does not build the other two for nothing.
+          # Only the emulator's ABI, so the job does not build the other three for nothing.
           script: ./gradlew :typst:connectedAndroidDeviceTest -Ptypst.androidAbis=x86_64
       # The suite writes its PDF to the runner argument `additionalTestOutputDir`, so AGP pulls it
       # off the device by itself — the app is uninstalled immediately after the run.
