@@ -406,6 +406,66 @@ rustup default stable-x86_64-pc-windows-gnu
 
 Released Windows artifacts are built on CI, whose toolchain hosts MSVC.
 
+## Releasing
+
+CI runs only for a release: nothing builds on a push or a pull request. Publishing a GitHub release
+starts the `Publish` workflow, which runs the full test suite (`Build`) as a gate, builds the native
+libraries for every platform, and uploads the result to Maven Central. The version comes from the
+tag, minus its leading `v`, so `v0.1.0-alpha02` publishes `0.1.0-alpha02`.
+
+1. **Make sure `main` holds what you want to ship.** The release is built from the commit the tag
+   points at, so merge everything first and pull:
+
+   ```bash
+   git switch main
+   git pull
+   ```
+
+2. **Create the tag and push it.** Use an annotated tag named `v<version>`:
+
+   ```bash
+   git tag -a v0.1.0-alpha02 -m "v0.1.0-alpha02"
+   git push origin v0.1.0-alpha02
+   ```
+
+   Pushing the tag on its own triggers nothing.
+
+3. **Create a draft release from that tag.** On GitHub, open
+   [Releases → Draft a new release](https://github.com/phfneves/typst-kmp/releases/new), pick the
+   tag you just pushed under *Choose a tag*, give it a title and write the notes (*Generate release
+   notes* fills them in from the merged pull requests). Tick *Set as a pre-release* for an alpha,
+   beta or RC. Then click **Save draft**, not *Publish release*.
+
+   The same thing from the command line:
+
+   ```bash
+   gh release create v0.1.0-alpha02 --verify-tag --draft --generate-notes --prerelease
+   ```
+
+   A draft triggers nothing either, so you can review the notes at leisure.
+
+4. **Publish the draft.** Open the draft and click **Publish release**, or run
+   `gh release edit v0.1.0-alpha02 --draft=false`. This is the step that starts the `Publish`
+   workflow; follow it in the [Actions](https://github.com/phfneves/typst-kmp/actions) tab. If any
+   test or any platform's build fails, nothing reaches Maven Central.
+
+5. **Wait for Maven Central.** `mavenCentralAutomaticPublishing=true` in `gradle.properties`
+   releases the deployment as soon as it passes validation, so there is nothing to click. Its status
+   shows on the [Central Portal](https://central.sonatype.com/publishing/deployments), and the
+   artifacts usually become resolvable within half an hour.
+
+6. **Update the version the README pins** in the installation examples.
+
+To retry a release whose workflow failed, rerun it from the Actions tab once the cause is fixed. If
+the fix needs a new commit, delete the release and the tag, and start again from step 2. A version
+that already reached Maven Central can never be replaced, so the retry needs a new version number.
+`Publish` can also be started by hand from the Actions tab (*Run workflow*) with an explicit
+version. That builds whatever branch you select, so prefer the release path.
+
+The workflow needs these repository secrets: `MAVEN_CENTRAL_USERNAME` and `MAVEN_CENTRAL_PASSWORD`
+(a Central Portal user token), plus `SIGNING_KEY_ID`, `SIGNING_PASSWORD` and `GPG_KEY_CONTENTS` for
+the GPG key that signs the artifacts.
+
 ## Module layout
 
 | Module | Purpose |
