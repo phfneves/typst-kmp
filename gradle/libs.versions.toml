@@ -1,21 +1,21 @@
 [versions]
-agp = "9.3.2"
+agp = "9.4.1"
 android-compileSdk = "37"
 android-minSdk = "24"
 android-ndk = "27.2.12479018"
-kotlin = "2.4.10"
-coroutines = "1.10.2"
-serialization = "1.9.0"
-kotlinx-io = "0.8.0"
+kotlin = "2.4.20"
+coroutines = "1.11.0"
+serialization = "1.11.0"
+kotlinx-io = "0.9.1"
 kotlinx-browser = "0.5.0"
-ktor = "3.3.0"
+ktor = "3.6.0"
 androidx-test = "1.7.0"
 androidx-activity = "1.13.0"
-androidx-core = "1.17.0"
-compose-multiplatform = "1.12.0"
+androidx-core = "1.19.1"
+compose-multiplatform = "1.12.1"
 # Compose Multiplatform ships Material 3 on a release line of its own.
 compose-material3 = "1.9.0"
-vanniktech-maven-publish = "0.36.0"
+vanniktech-maven-publish = "0.37.0"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }

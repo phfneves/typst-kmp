@@ -55,7 +55,8 @@ val hostRustTarget: RustTarget = cargo.hostTriple()?.let(RustTargets::jvmHostFor
         val arch = providers.systemProperty("os.arch").get().lowercase()
         val aarch64 = arch == "aarch64" || arch == "arm64"
         when (hostFamily) {
-            HostFamily.WINDOWS -> RustTargets.windowsX64Msvc
+            HostFamily.WINDOWS ->
+                if (aarch64) RustTargets.windowsArm64Msvc else RustTargets.windowsX64Msvc
             HostFamily.MAC -> if (aarch64) RustTargets.macosArm64 else RustTargets.macosX64
             else -> if (aarch64) RustTargets.linuxArm64 else RustTargets.linuxX64
         }
@@ -382,7 +383,7 @@ listOf("js", "wasmJs").forEach { targetName ->
  *
  * Locally only the host's can be produced, so that is the only classifier jar registered — asking
  * for the others would wire up a cargo build this machine cannot run. The CI publish job passes
- * `-Ptypst.prebuiltDir=…` with binaries built on their own runners, and then all five appear.
+ * `-Ptypst.prebuiltDir=…` with binaries built on their own runners, and then all six appear.
  *
  * Registered up front: registering tasks from inside another task's configuration action is not
  * allowed.
