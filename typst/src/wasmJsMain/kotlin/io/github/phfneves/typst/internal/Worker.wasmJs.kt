@@ -1,5 +1,6 @@
 package io.github.phfneves.typst.internal
 
+import org.khronos.webgl.Uint32Array
 import org.khronos.webgl.Uint8Array
 import org.khronos.webgl.get
 import org.khronos.webgl.set
@@ -18,8 +19,17 @@ internal actual class WorkerHandle(private val worker: Worker) {
         postMessage(worker, initMessage(id, configJson, glueUrl, wasmUrl))
     }
 
-    actual fun post(id: Int, operation: String, text: String?, bytes: ByteArray?) {
-        postMessage(worker, message(id, operation, text, bytes?.toUint8Array()))
+    actual fun post(
+        id: Int,
+        operation: String,
+        text: String?,
+        bytes: ByteArray?,
+        lengths: IntArray?,
+    ) {
+        postMessage(
+            worker,
+            message(id, operation, text, bytes?.toUint8Array(), lengths?.toUint32Array()),
+        )
     }
 
     actual fun onMessage(handler: (WorkerReply) -> Unit) {
@@ -59,11 +69,18 @@ private fun initMessage(id: Int, configJson: String, glueUrl: String, wasmUrl: S
     "({ id: id, op: 'init', text: configJson, glueUrl: glueUrl, wasmUrl: wasmUrl })",
 )
 
-private fun message(id: Int, op: String, text: String?, bytes: Uint8Array?): JsAny = js(
+private fun message(
+    id: Int,
+    op: String,
+    text: String?,
+    bytes: Uint8Array?,
+    lengths: Uint32Array?,
+): JsAny = js(
     """{
         const request = { id: id, op: op };
         if (text !== null) request.text = text;
         if (bytes !== null) request.bytes = bytes;
+        if (lengths !== null) request.lengths = lengths;
         return request;
     }""",
 )
@@ -87,6 +104,12 @@ private fun replyBlobCount(reply: JsAny): Int = js(
 private fun replyBlob(reply: JsAny, index: Int): Uint8Array = js("reply.blobs[index]")
 
 private fun allocate(size: Int): Uint8Array = js("new Uint8Array(size)")
+
+private fun allocateLengths(size: Int): Uint32Array = js("new Uint32Array(size)")
+
+private fun setLength(array: Uint32Array, index: Int, value: Int) {
+    js("array[index] = value")
+}
 
 // --- conversions -------------------------------------------------------------------------------
 
@@ -118,6 +141,12 @@ private fun readReply(reply: JsAny): WorkerReply {
 private fun Uint8Array.toByteArray(): ByteArray {
     val result = ByteArray(length)
     for (index in result.indices) result[index] = this[index]
+    return result
+}
+
+private fun IntArray.toUint32Array(): Uint32Array {
+    val result = allocateLengths(size)
+    for (index in indices) setLength(result, index, this[index])
     return result
 }
 

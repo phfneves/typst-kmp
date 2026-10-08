@@ -106,8 +106,25 @@ impl TypstEngine {
         Ok(count)
     }
 
-    pub fn compile(&self, request: CompileRequest) -> Result<CompileOutcome, String> {
-        let outcome = self.compile_uncached(request);
+    /// Compiles `request`. `files` holds the bytes of [`CompileRequest::files`], in the same
+    /// order; they are visible to this compilation only and never touch the engine's VFS.
+    pub fn compile(
+        &self,
+        request: CompileRequest,
+        files: Vec<Vec<u8>>,
+    ) -> Result<CompileOutcome, String> {
+        if request.files.len() != files.len() {
+            return Err(format!(
+                "compile request names {} files but {} were supplied",
+                request.files.len(),
+                files.len()
+            ));
+        }
+        let mut overlay = Vfs::new();
+        for (path, bytes) in request.files.iter().zip(files) {
+            overlay.insert(parse_path(path)?, Bytes::new(bytes));
+        }
+        let outcome = self.compile_uncached(request, &overlay);
         // Typst memoises layout and evaluation in a process-wide cache that only shrinks when
         // asked to. Drop whatever went unused for a few compilations, as `typst watch` does, so
         // a long-lived engine does not grow without bound.
@@ -115,9 +132,13 @@ impl TypstEngine {
         outcome
     }
 
-    fn compile_uncached(&self, request: CompileRequest) -> Result<CompileOutcome, String> {
+    fn compile_uncached(
+        &self,
+        request: CompileRequest,
+        overlay: &Vfs,
+    ) -> Result<CompileOutcome, String> {
         let main = parse_path(&request.main)?;
-        if !self.vfs.contains(main) {
+        if !overlay.contains(main) && !self.vfs.contains(main) {
             // Report this like any other miss so the Kotlin resolution loop can fetch it.
             return Ok(CompileOutcome {
                 response: CompileResponse {
@@ -150,7 +171,15 @@ impl TypstEngine {
             )
         });
 
-        let world = KmpWorld::new(library, &self.book, &self.fonts, &self.vfs, main, today);
+        let world = KmpWorld::new(
+            library,
+            &self.book,
+            &self.fonts,
+            &self.vfs,
+            overlay,
+            main,
+            today,
+        );
 
         let Warned { output, warnings } = typst::compile::<PagedDocument>(&world);
 
@@ -462,10 +491,14 @@ fn embedded_fonts() -> Vec<Font> {
 }
 
 /// Parses a compile request and runs it.
-pub fn compile_json(engine: &TypstEngine, request_json: &str) -> Result<CompileOutcome, String> {
+pub fn compile_json(
+    engine: &TypstEngine,
+    request_json: &str,
+    files: Vec<Vec<u8>>,
+) -> Result<CompileOutcome, String> {
     let request: CompileRequest = serde_json::from_str(request_json)
         .map_err(|err| format!("invalid compile request: {err}"))?;
-    engine.compile(request)
+    engine.compile(request, files)
 }
 
 /// Serializes a [`CompileResponse`] for transport.

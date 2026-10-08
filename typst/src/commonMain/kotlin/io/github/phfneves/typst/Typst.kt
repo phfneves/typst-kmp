@@ -10,7 +10,14 @@ import io.github.phfneves.typst.internal.encodeConfig
 import io.github.phfneves.typst.internal.encodeRequest
 import io.github.phfneves.typst.internal.toDiagnostic
 import kotlin.concurrent.Volatile
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.AtomicInt
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.decrementAndFetch
+import kotlin.concurrent.atomics.incrementAndFetch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -23,44 +30,56 @@ import kotlinx.coroutines.withContext
  *
  * ## Sharing
  *
- * An instance is safe to share between coroutines and threads. Every operation, [compile] above
- * all, runs alone: a compilation holds the instance from seeding [CompileRequest.files] to its last
- * output, so concurrent compilations never see each other's files even when they use the same
- * paths. They queue rather than run in parallel; create more instances if you need throughput.
+ * An instance is safe to share between coroutines and threads, and compilations on it run in
+ * parallel: each one sees its own [CompileRequest.files] and nothing of another's, even when they
+ * use the same paths. Calls that change the instance — [addFont], [removeFile], [clearFiles],
+ * [clearPackages], and storing what [TypstConfig.fileResolver] or [TypstConfig.packageResolver]
+ * return — wait for the compilations in progress and run alone.
  *
- * Because the resolvers run inside that exclusive section, a [FileResolver] or [PackageResolver]
- * must not call back into the same instance, or it waits for itself forever.
+ * In the browser the engine is a single Web Worker, so compilations there still queue.
+ *
+ * Resolvers run outside any lock and may call back into the instance.
  *
  * ## The virtual file system
  *
- * Every file the compiler sees lives in an in-memory file system owned by this instance, and it
- * persists from one compilation to the next:
+ * The compiler sees two layers of in-memory files:
  *
- * * [CompileRequest.files] are written before each compilation, replacing whatever was at those
- *   paths. Pass data that changes, such as a JSON payload, this way.
- * * A file fetched through [TypstConfig.fileResolver] is kept, and the resolver is not asked for
- *   that path again. That suits assets that never change under a given path; for anything that
- *   does, pass it in the request instead, or [removeFile] it when it changes.
- * * Packages fetched through [TypstConfig.packageResolver] are kept too. A published version
- *   never changes, so that is a cache, not a hazard.
+ * * **The request's own files**, [CompileRequest.files] plus whatever [CompileRequest.fileResolver]
+ *   returns. They exist for that compilation only and are gone when it returns. Pass data that
+ *   changes, such as a JSON payload or a template tied to one request, this way.
+ * * **The instance's files**, owned by this instance and kept from one compilation to the next.
+ *   A file fetched through [TypstConfig.fileResolver] is kept, and the resolver is not asked for
+ *   that path again; that suits assets that never change under a given path. Packages fetched
+ *   through [TypstConfig.packageResolver] are kept too — a published version never changes, so
+ *   that is a cache, not a hazard.
  *
- * Nothing is removed on its own. When the documents an instance compiles keep bringing new paths,
- * such as an image per record, call [clearFiles] now and then — or after every compilation, which
- * costs no more than resolving the files again. Fonts and packages survive it.
+ * A request's file shadows an instance file at the same path. Nothing is removed from the
+ * instance on its own; [removeFile] and [clearFiles] do that. Fonts and packages survive both.
+ *
+ * ## Cancellation
+ *
+ * Cancelling the calling coroutine stops [compile] between resolution rounds, but a round already
+ * running in native code finishes first: the Typst compiler has no way to be interrupted.
  *
  * ```kotlin
  * Typst.create().use { typst ->
- *     val pdf = typst.compile(CompileRequest.of("= Olá\nMundo")).getOrThrow()
+ *     val pdf = typst.compilePdf(CompileRequest.of("= Olá\nMundo"))
  * }
  * ```
  */
+@OptIn(ExperimentalAtomicApi::class)
 public class Typst private constructor(
     private val engine: NativeEngine,
     private val config: TypstConfig,
 ) : AutoCloseable {
 
-    /** Serialises every engine operation; see "Sharing" above. */
+    /** Serialises every change to the instance; see "Sharing" above. */
     private val mutex = Mutex()
+
+    /** Operations that have started and not yet returned; see [close]. */
+    private val active = AtomicInt(0)
+
+    private val released = AtomicBoolean(false)
 
     @Volatile
     private var closed = false
@@ -69,27 +88,41 @@ public class Typst private constructor(
      * Compiles [request], resolving missing files and packages as it goes.
      *
      * The native compiler cannot perform I/O, so a missing dependency comes back as a structured
-     * miss rather than an error. This method fetches those through
-     * [TypstConfig.fileResolver] / [TypstConfig.packageResolver], feeds them into the VFS and
-     * retries, up to [TypstConfig.maxResolveRounds] times.
+     * miss rather than an error. This method fetches those through the resolvers and compiles
+     * again, for as long as each round supplies something new. Every file a document imports at
+     * the same depth arrives in one round, and Typst's caches carry the work already done from
+     * one round to the next, so a deep import chain costs little more than a shallow one.
      */
-    public suspend fun compile(request: CompileRequest): CompileResult = exclusive {
-        compileLocked(request)
+    public suspend fun compile(request: CompileRequest): CompileResult = tracked {
+        compileTracked(request)
     }
 
-    private suspend fun compileLocked(request: CompileRequest): CompileResult {
-        val requestJson = encodeRequest(request)
-        val attempted = mutableSetOf<String>()
-
-        withContext(Dispatchers.Default) {
-            for ((path, bytes) in request.files) {
-                engine.vfsPut(path, bytes)
-            }
+    /**
+     * Compiles [request] and returns its PDF, for the common case of wanting nothing else.
+     *
+     * @throws TypstCompilationException if the document did not compile.
+     * @throws IllegalStateException if [request] did not ask for exactly one PDF.
+     */
+    public suspend fun compilePdf(request: CompileRequest): ByteArray =
+        when (val result = compile(request)) {
+            is CompileResult.Success -> result.pdf
+            is CompileResult.Failure -> throw TypstCompilationException(result.errors, result.unresolved)
         }
 
+    @Suppress("DEPRECATION")
+    private suspend fun compileTracked(request: CompileRequest): CompileResult {
+        val overlay = LinkedHashMap(request.files)
+        val attempted = mutableSetOf<String>()
+
         var lastResponse: WireCompileResponse? = null
-        repeat(config.maxResolveRounds.coerceAtLeast(1)) {
-            val native = withContext(Dispatchers.Default) { engine.compile(requestJson) }
+        var rounds = 0
+        while (rounds++ < config.maxResolveRounds.coerceAtLeast(1)) {
+            currentCoroutineContext().ensureActive()
+            val paths = overlay.keys.toList()
+            val requestJson = encodeRequest(request, paths)
+            val native = withContext(Dispatchers.Default) {
+                engine.compile(requestJson, paths.map { overlay.getValue(it) })
+            }
             val response = decodeResponse(native.json)
             lastResponse = response
 
@@ -101,11 +134,11 @@ public class Typst private constructor(
             }
 
             // Only retry for misses we have not already tried to satisfy, otherwise a resolver
-            // that keeps returning null would spin until the round budget runs out.
+            // that keeps returning null would spin forever.
             val pending = response.missing.filter { attempted.add(it.key()) }
             if (pending.isEmpty()) return response.toFailure()
 
-            val resolvedAny = resolve(pending)
+            val resolvedAny = resolve(request, pending, overlay)
             if (!resolvedAny) return response.toFailure()
         }
 
@@ -119,7 +152,7 @@ public class Typst private constructor(
     }
 
     /**
-     * Removes one file from the virtual file system, so the next compilation that needs it asks
+     * Removes one file from the instance's files, so the next compilation that needs it asks
      * [TypstConfig.fileResolver] again. Returns whether the file was there.
      *
      * [path] uses the same form as [CompileRequest.files], such as `/images/logo.png`.
@@ -129,9 +162,8 @@ public class Typst private constructor(
     }
 
     /**
-     * Removes every file from the virtual file system: those passed in [CompileRequest.files] and
-     * those fetched through [TypstConfig.fileResolver]. Packages and fonts are kept. Returns how
-     * many files were removed.
+     * Removes every file fetched through [TypstConfig.fileResolver]. Packages and fonts are kept.
+     * Returns how many files were removed.
      */
     public suspend fun clearFiles(): Int = exclusive {
         withContext(Dispatchers.Default) { engine.vfsClearFiles() }
@@ -148,67 +180,93 @@ public class Typst private constructor(
     /**
      * Releases the engine. Safe to call at any time and more than once.
      *
-     * An operation already running finishes first, and the engine is released as it returns; one
-     * still waiting for its turn fails with [IllegalStateException], as does every later call.
+     * Operations already running finish first, and the engine is released as the last of them
+     * returns; one still waiting to change the instance fails with [IllegalStateException], as
+     * does every later call.
      */
     override fun close() {
         if (closed) return
         closed = true
-        releaseIfIdle()
+        if (active.load() == 0) release()
     }
 
     /**
-     * Runs [block] with the engine to itself.
+     * Runs [block] counted as an operation in progress, so [close] cannot free the engine
+     * underneath it.
      *
-     * [close] cannot suspend, so it cannot wait for the operation in progress, and freeing the
-     * engine underneath one would pull the native memory out from under it. Instead every exit
-     * from here checks whether the instance was closed meanwhile and, if so, releases the engine
-     * itself. Whichever of the two runs last does it: [close] sets the flag before trying the lock,
-     * and this releases the lock before reading the flag.
+     * [close] cannot suspend, so it cannot wait. Instead every operation registers itself before
+     * checking the flag, and the last one out after a [close] releases the engine. Whichever order
+     * the two race in, one of them sees the other: [close] sets the flag before reading the count,
+     * and this raises the count before reading the flag.
      */
-    private suspend fun <T> exclusive(block: suspend () -> T): T {
-        check(!closed) { CLOSED }
+    private suspend fun <T> tracked(block: suspend () -> T): T {
+        active.incrementAndFetch()
         try {
-            return mutex.withLock {
-                check(!closed) { CLOSED }
-                block()
-            }
+            check(!closed) { CLOSED }
+            return block()
         } finally {
-            if (closed) releaseIfIdle()
+            if (active.decrementAndFetch() == 0 && closed) release()
         }
     }
 
-    private fun releaseIfIdle() {
-        if (!mutex.tryLock()) return
-        try {
-            engine.close()
-        } finally {
-            mutex.unlock()
+    /** Runs [block] as an operation in progress that also has the instance to itself. */
+    private suspend fun <T> exclusive(block: suspend () -> T): T = tracked {
+        mutex.withLock {
+            check(!closed) { CLOSED }
+            block()
         }
     }
 
-    /** Fetches [pending] through the configured resolvers. Returns true if anything was added. */
-    private suspend fun resolve(pending: List<WireMissing>): Boolean {
+    private fun release() {
+        if (released.compareAndSet(expectedValue = false, newValue = true)) engine.close()
+    }
+
+    /**
+     * Fetches [pending] through the resolvers: the request's own file resolver first, whose
+     * answers go into [overlay], then the instance's, whose answers are kept in the engine.
+     * Returns true if anything was added.
+     */
+    private suspend fun resolve(
+        request: CompileRequest,
+        pending: List<WireMissing>,
+        overlay: MutableMap<String, ByteArray>,
+    ): Boolean {
         var resolved = false
         for (miss in pending) {
             when (miss) {
                 is WireMissing.File -> {
-                    val bytes = config.fileResolver?.resolve(miss.path) ?: continue
-                    withContext(Dispatchers.Default) { engine.vfsPut(miss.path, bytes) }
+                    val own = request.fileResolver?.resolve(miss.path)
+                    if (own != null) {
+                        overlay[miss.path] = own
+                        resolved = true
+                        continue
+                    }
+                    val shared = config.fileResolver?.resolve(miss.path) ?: continue
+                    store { engine.vfsPut(miss.path, shared) }
                     resolved = true
                 }
 
                 is WireMissing.Package -> {
                     val spec = PackageSpec(miss.namespace, miss.name, miss.version)
                     val archive = config.packageResolver?.resolve(spec) ?: continue
-                    withContext(Dispatchers.Default) {
-                        engine.vfsPutPackage(spec.toString(), archive)
-                    }
+                    store { engine.vfsPutPackage(spec.toString(), archive) }
                     resolved = true
                 }
             }
         }
         return resolved
+    }
+
+    /**
+     * Writes into the instance's files, alone, from within a compilation already [tracked].
+     *
+     * Unlike [exclusive] this does not refuse a closed instance: the compilation was running when
+     * [close] came, and an operation in progress is allowed to finish.
+     */
+    private suspend fun store(block: suspend () -> Unit) {
+        mutex.withLock {
+            withContext(Dispatchers.Default) { block() }
+        }
     }
 
     private fun buildOutputs(

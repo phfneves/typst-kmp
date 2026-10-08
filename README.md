@@ -244,7 +244,11 @@ traversal is impossible because there are no paths, and it is the only design th
 browser, where a package download is inherently asynchronous and cannot happen inside a synchronous
 call into WebAssembly.
 
-Supply the resolvers through `TypstConfig`:
+The loop runs for as long as each round resolves something new, so there is no depth to configure.
+Every file imported at the same depth arrives in one round, and Typst's caches carry the work
+already done into the next, so a deep import chain costs little more than a shallow one.
+
+Supply the resolvers through `TypstConfig`, or per request through `CompileRequest.fileResolver`:
 
 ```kotlin
 val config = TypstConfig(
@@ -256,47 +260,53 @@ val config = TypstConfig(
 ### Sharing an instance
 
 `Typst.create()` loads every font, so create one instance and share it across the application. It
-is safe to call from any coroutine or thread. The instance runs one operation at a time: a
-compilation holds it from writing `CompileRequest.files` to producing its last output, so two
-compilations that both write `/main.typ` or `/data.json` never see each other's files. They queue
-rather than run in parallel; for throughput, keep a small pool of instances instead.
+is safe to call from any coroutine or thread, and compilations on it run in parallel on the JVM,
+Android and Kotlin/Native. Each compilation sees only its own request files, so two that both pass
+`/main.typ` or `/data.json` never see each other's. In the browser the engine is a single Web
+Worker and compilations queue.
 
-Resolvers run while the compilation holds the instance, so a resolver must not call back into it.
+Calls that change the instance — `addFont`, `removeFile`, `clearFiles`, `clearPackages`, and storing
+what the instance's resolvers return — wait for the compilations in progress and run alone.
+Resolvers run outside any lock and may call back into the instance.
 
-`close()` is safe at any time. A compilation already running finishes first and the engine is
-released when it returns; any call made after that fails with `IllegalStateException`.
+`close()` is safe at any time. Operations already running finish first and the engine is released
+when the last one returns; any call made after that fails with `IllegalStateException`.
+
+### Concurrency and cancellation
+
+Cancelling the coroutine that called `compile()` stops it between resolution rounds. A round
+already running in native code finishes first: the Typst compiler has no way to be interrupted, so
+a `withTimeout` stops waiting on time but the CPU work of that round still completes.
 
 ### What stays in the virtual file system
 
-The virtual file system belongs to the instance and outlives each compilation:
+The compiler sees two layers of files:
 
 | Source | Lifetime |
 | --- | --- |
-| `CompileRequest.files` | written before every compilation, replacing what was at those paths, then kept |
-| `fileResolver` | kept; the resolver is not asked for that path again |
-| `packageResolver` | kept; a published package version never changes |
+| `CompileRequest.files` | this compilation only; shadows an instance file at the same path |
+| `CompileRequest.fileResolver` | this compilation only; asked before `TypstConfig.fileResolver` |
+| `TypstConfig.fileResolver` | kept by the instance; the resolver is not asked for that path again |
+| `TypstConfig.packageResolver` | kept by the instance; a published package version never changes |
 
 That gives two rules:
 
-* **Data that changes goes in the request.** A JSON payload, a generated chart, a photo that can be
-  replaced under the same path: pass them in `CompileRequest.files`. Served through the resolver,
-  only the first version would ever be read.
-* **Clear what accumulates.** Nothing is removed on its own, so documents that keep bringing new
-  paths, such as one image per record, grow the instance's memory with every compilation.
-  `clearFiles()` removes every file but keeps fonts and packages. Calling it after each compilation
-  costs no more than resolving those files again. `removeFile(path)` drops a single file and
-  `clearPackages()` drops the packages.
+* **Anything tied to a request goes in the request.** A JSON payload, a template picked per call, a
+  photo that can be replaced under the same path: pass them in `CompileRequest.files`, or serve them
+  from `CompileRequest.fileResolver`. Nothing has to be cleaned up afterwards.
+* **The instance's resolver is a cache.** Use it for assets that never change under a path. Nothing
+  is removed from it on its own; `removeFile(path)` drops one file, `clearFiles()` all of them, and
+  `clearPackages()` the packages.
 
 ```kotlin
-val typst = Typst.create(TypstConfig(fonts = fonts, fileResolver = images))
+val typst = Typst.create(TypstConfig(fonts = fonts, fileResolver = sharedImages))
 
-suspend fun render(data: ByteArray): ByteArray {
-    val result = typst.compile(
-        CompileRequest(files = mapOf("/main.typ" to template, "/data.json" to data)),
-    )
-    typst.clearFiles()
-    return result.getOrThrow().filterIsInstance<Output.Pdf>().single().bytes
-}
+suspend fun render(templateDir: Path, data: ByteArray): ByteArray = typst.compilePdf(
+    CompileRequest(
+        files = mapOf("/data.json" to data),
+        fileResolver = FileResolver { path -> readOrNull(templateDir, path) },
+    ),
+)
 ```
 
 Typst's own memoisation cache is trimmed after every compilation, so it does not grow with the

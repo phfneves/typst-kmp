@@ -12,11 +12,11 @@ public class CompileRequest(
     /** Entry point, as a VFS path. */
     public val main: String = "/main.typ",
     /**
-     * Files written into the VFS before compiling, replacing whatever was at those paths. Keys
-     * are VFS paths such as `/chapters/one.typ`.
+     * Files this compilation sees, keyed by VFS paths such as `/chapters/one.typ`.
      *
-     * They stay in the VFS after the compilation, like everything else there, until replaced or
-     * removed with [Typst.removeFile] or [Typst.clearFiles].
+     * They belong to this compilation alone: they shadow any instance file at the same path,
+     * other compilations running at the same time never see them, and they are gone when
+     * [Typst.compile] returns.
      */
     public val files: Map<String, ByteArray> = emptyMap(),
     /** Values reachable from the document through `sys.inputs`. */
@@ -28,6 +28,15 @@ public class CompileRequest(
      * which keeps compilation reproducible.
      */
     public val now: TypstDate? = null,
+    /**
+     * Supplies files this compilation reads but [files] does not include, such as the rest of a
+     * template directory chosen per request.
+     *
+     * It is asked before [TypstConfig.fileResolver], and what it returns is treated like [files]:
+     * visible to this compilation only and gone when it returns. A path it answers `null` for
+     * falls through to [TypstConfig.fileResolver].
+     */
+    public val fileResolver: FileResolver? = null,
 ) {
     public companion object {
         /** Compiles a single source string, with no other files involved. */
@@ -132,8 +141,7 @@ public sealed interface CompileResult {
         override val warnings: List<Diagnostic>,
         /**
          * Files and packages the document asked for that neither the request nor the resolvers
-         * could supply. Non-empty here usually means a missing resolver, a typo in an import,
-         * or [TypstConfig.maxResolveRounds] being too low for a deep dependency chain.
+         * could supply. Non-empty here usually means a missing resolver or a typo in an import.
          */
         public val unresolved: List<Unresolved>,
     ) : CompileResult
@@ -145,7 +153,16 @@ public sealed interface CompileResult {
     }
 }
 
-/** Convenience accessor for the common single-PDF case. */
+/**
+ * The PDF this compilation produced.
+ *
+ * @throws IllegalStateException if the request did not ask for exactly one PDF.
+ */
+public val CompileResult.Success.pdf: ByteArray
+    get() = outputs.filterIsInstance<Output.Pdf>().singleOrNull()?.bytes
+        ?: error("Expected exactly one PDF among the outputs; request one with OutputFormat.Pdf.")
+
+/** Convenience accessor for the common single-PDF case; `null` on failure. */
 public val CompileResult.pdfBytes: ByteArray?
     get() = (this as? CompileResult.Success)
         ?.outputs
