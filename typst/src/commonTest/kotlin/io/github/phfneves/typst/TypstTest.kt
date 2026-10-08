@@ -333,4 +333,50 @@ class TypstTest {
         assertIs<CompileResult.Success>(result)
         assertFailsWith<IllegalStateException> { typst.compile(CompileRequest.of("hello")) }
     }
+
+    @Test
+    fun listsTheInstanceFilesPackagesAndFonts() = runTest {
+        val config = TypstConfig(
+            fileResolver = FileResolver(mapOf("/helpers.typ" to "#let x = 1".encodeToByteArray())),
+        )
+
+        Typst.create(config).use { typst ->
+            assertIs<CompileResult.Success>(
+                typst.compile(CompileRequest.of("#import \"/helpers.typ\": x\n#x")),
+            )
+
+            assertEquals(listOf(VfsEntry("/helpers.typ", 10)), typst.listFiles())
+            assertEquals(emptyList(), typst.listPackages())
+            assertContains(typst.fontFamilies(), "Libertinus Serif")
+        }
+    }
+
+    @Test
+    fun successHandsBackItsPdf() = runTest {
+        Typst.create().use { typst ->
+            val success = assertIs<CompileResult.Success>(typst.compile(CompileRequest.of("hello")))
+            assertTrue(success.pdf.decodeToString(0, 5).startsWith("%PDF-"), "not a PDF")
+
+            val svgOnly = assertIs<CompileResult.Success>(
+                typst.compile(CompileRequest.of("hello", outputs = listOf(OutputFormat.Svg()))),
+            )
+            assertFailsWith<IllegalStateException> { svgOnly.pdf }
+        }
+    }
+
+    @Test
+    fun rendersDiagnosticsLikeTheCli() = runTest {
+        Typst.create().use { typst ->
+            val error = assertFailsWith<TypstCompilationException> {
+                typst.compilePdf(CompileRequest.of("Olá\n#nada"))
+            }
+
+            val rendered = error.errors.single().rendered
+            assertContains(rendered, "error: unknown variable: nada")
+            assertContains(rendered, "/main.typ:2:2")
+            assertContains(rendered, "2 │ #nada")
+            assertContains(rendered, "^^^^")
+            assertContains(error.message.orEmpty(), rendered)
+        }
+    }
 }

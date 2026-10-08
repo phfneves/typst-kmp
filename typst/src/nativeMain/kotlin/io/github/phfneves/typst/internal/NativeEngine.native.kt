@@ -4,6 +4,7 @@ import io.github.phfneves.typst.TypstNativeException
 import io.github.phfneves.typst.cinterop.typst_kmp_compile
 import io.github.phfneves.typst.cinterop.typst_kmp_engine_add_font
 import io.github.phfneves.typst.cinterop.typst_kmp_engine_free
+import io.github.phfneves.typst.cinterop.typst_kmp_engine_inspect
 import io.github.phfneves.typst.cinterop.typst_kmp_engine_new
 import io.github.phfneves.typst.cinterop.typst_kmp_engine_vfs_clear_files
 import io.github.phfneves.typst.cinterop.typst_kmp_engine_vfs_clear_packages
@@ -90,6 +91,17 @@ internal actual class NativeEngine private constructor(configJson: String) {
         val count = typst_kmp_engine_vfs_clear_packages(alive(), error.ptr)
         if (count < 0) fail(error, "Failed to clear the packages.")
         count
+    }
+
+    actual suspend fun inspect(): String = memScoped {
+        val error = alloc<CPointerVar<ByteVar>>()
+        val pointer = typst_kmp_engine_inspect(alive(), error.ptr)
+            ?: fail(error, "Failed to inspect the native Typst engine.")
+        try {
+            pointer.toKString()
+        } finally {
+            typst_kmp_string_free(pointer)
+        }
     }
 
     actual suspend fun compile(requestJson: String, files: List<ByteArray>): NativeResult {

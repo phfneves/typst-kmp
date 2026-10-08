@@ -209,6 +209,25 @@ pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_vfsCle
     })
 }
 
+/// Returns what the engine holds, as JSON.
+#[no_mangle]
+pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_inspect<'local>(
+    mut env: JNIEnv<'local>,
+    _this: JObject<'local>,
+    handle: jlong,
+) -> jni::sys::jstring {
+    let null = JObject::null().into_raw();
+    guard(&mut env, null, |env| {
+        let engine = unsafe { engine(handle) }?;
+        let locked = engine.read().map_err(|_| "engine lock poisoned")?;
+        let json = typst_kmp_core::inspect_json(&locked);
+        drop(locked);
+        env.new_string(json)
+            .map(|value| value.into_raw())
+            .map_err(|err| format!("failed to allocate inspection string: {err}"))
+    })
+}
+
 /// Returns `Object[] { String responseJson, byte[][] blobs }`.
 ///
 /// Handing the blobs back in one call keeps the result lifetime entirely on the Java heap, so

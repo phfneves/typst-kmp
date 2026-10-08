@@ -158,6 +158,8 @@ pub struct Diagnostic {
     pub column: Option<usize>,
     pub hints: Vec<String>,
     pub trace: Vec<TracePoint>,
+    /// The diagnostic laid out as the `typst` CLI prints it, source excerpt included.
+    pub rendered: String,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -174,4 +176,30 @@ pub struct TracePoint {
     pub path: Option<String>,
     pub line: Option<usize>,
     pub column: Option<usize>,
+}
+
+/// What an engine holds, for diagnostics and housekeeping.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Inspection {
+    /// Files outside packages, sorted by path.
+    pub files: Vec<FileEntry>,
+    /// Every package loaded, as `@namespace/name:version`, sorted.
+    pub packages: Vec<String>,
+    /// Every font family, sorted, with how many faces each has.
+    pub fonts: Vec<FontFamily>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileEntry {
+    pub path: String,
+    pub size: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FontFamily {
+    pub name: String,
+    pub faces: usize,
 }

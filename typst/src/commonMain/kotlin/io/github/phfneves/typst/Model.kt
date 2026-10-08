@@ -198,6 +198,11 @@ public data class Diagnostic(
     public val column: Int?,
     public val hints: List<String>,
     public val trace: List<TracePoint>,
+    /**
+     * The diagnostic laid out as the `typst` CLI prints it, without colour: the message, the
+     * location, the source line with the span underlined, then the hints and the trace.
+     */
+    public val rendered: String = "",
 ) {
     override fun toString(): String = buildString {
         append(severity.name.lowercase()).append(": ").append(message)
@@ -218,3 +223,11 @@ public data class TracePoint(
 )
 
 public enum class Severity { ERROR, WARNING }
+
+/** A file the instance keeps, as [Typst.listFiles] reports it. */
+public data class VfsEntry(
+    /** VFS path, in the same form as [CompileRequest.files]. */
+    public val path: String,
+    /** Size in bytes. */
+    public val size: Long,
+)
