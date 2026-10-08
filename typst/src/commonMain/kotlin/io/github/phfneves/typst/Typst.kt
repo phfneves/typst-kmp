@@ -5,6 +5,7 @@ import io.github.phfneves.typst.internal.NativeEngine
 import io.github.phfneves.typst.internal.WireCompileResponse
 import io.github.phfneves.typst.internal.WireMissing
 import io.github.phfneves.typst.internal.createNativeEngine
+import io.github.phfneves.typst.internal.decodeInspection
 import io.github.phfneves.typst.internal.decodeResponse
 import io.github.phfneves.typst.internal.encodeConfig
 import io.github.phfneves.typst.internal.encodeRequest
@@ -178,6 +179,31 @@ public class Typst private constructor(
     }
 
     /**
+     * Lists the files the instance keeps — those fetched through [TypstConfig.fileResolver] —
+     * sorted by path, with their sizes. Packages are listed by [listPackages] instead.
+     */
+    public suspend fun listFiles(): List<VfsEntry> = tracked {
+        inspect().files.map { VfsEntry(it.path, it.size) }
+    }
+
+    /** Lists the packages the instance keeps, sorted. */
+    public suspend fun listPackages(): List<PackageSpec> = tracked {
+        inspect().packages.map { parsePackageSpec(it) }
+    }
+
+    /**
+     * Lists every font family the compiler can use, sorted: the embedded fonts, [TypstConfig.fonts]
+     * and whatever [addFont] registered. A document asking for a family missing from here gets
+     * Typst's `unknown font family` warning in [CompileResult.warnings].
+     */
+    public suspend fun fontFamilies(): List<String> = tracked {
+        inspect().fonts.map { it.name }
+    }
+
+    private suspend fun inspect() =
+        decodeInspection(withContext(Dispatchers.Default) { engine.inspect() })
+
+    /**
      * Releases the engine. Safe to call at any time and more than once.
      *
      * Operations already running finish first, and the engine is released as the last of them
@@ -309,6 +335,20 @@ public class Typst private constructor(
 }
 
 private const val CLOSED = "This Typst instance has been closed."
+
+/** Parses `@namespace/name:version`, the form the engine reports packages in. */
+private fun parsePackageSpec(text: String): PackageSpec {
+    val slash = text.indexOf('/')
+    val colon = text.lastIndexOf(':')
+    if (!text.startsWith('@') || slash < 0 || colon < slash) {
+        throw TypstException("Native layer reported a malformed package spec: $text")
+    }
+    return PackageSpec(
+        namespace = text.substring(1, slash),
+        name = text.substring(slash + 1, colon),
+        version = text.substring(colon + 1),
+    )
+}
 
 private fun WireMissing.key(): String = when (this) {
     is WireMissing.File -> "file:$path"

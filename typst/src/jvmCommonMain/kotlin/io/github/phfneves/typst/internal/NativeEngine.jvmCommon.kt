@@ -42,6 +42,8 @@ internal object TypstNative {
      */
     external fun compile(handle: Long, requestJson: String, files: Array<ByteArray>): Array<Any>
 
+    external fun inspect(handle: Long): String
+
     external fun nativeVersion(): String
 }
 
@@ -63,6 +65,8 @@ internal actual class NativeEngine private constructor(configJson: String) {
     actual suspend fun vfsClearFiles(): Int = TypstNative.vfsClearFiles(alive())
 
     actual suspend fun vfsClearPackages(): Int = TypstNative.vfsClearPackages(alive())
+
+    actual suspend fun inspect(): String = TypstNative.inspect(alive())
 
     actual suspend fun compile(requestJson: String, files: List<ByteArray>): NativeResult {
         val raw = TypstNative.compile(alive(), requestJson, files.toTypedArray())

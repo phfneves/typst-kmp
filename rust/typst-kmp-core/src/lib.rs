@@ -27,7 +27,7 @@ pub mod protocol;
 pub mod vfs;
 pub mod world;
 
-pub use engine::{compile_json, response_json, CompileOutcome, TypstEngine};
+pub use engine::{compile_json, inspect_json, response_json, CompileOutcome, TypstEngine};
 pub use protocol::{CompileRequest, CompileResponse, EngineConfig, Missing};
 
 /// Builds an engine from its JSON configuration.
@@ -282,5 +282,55 @@ mod tests {
         let mut request = pdf_request("/main.typ");
         request.files = vec!["/main.typ".to_string()];
         assert!(engine.compile(request, Vec::new()).is_err());
+    }
+
+    #[test]
+    fn renders_a_diagnostic_like_the_cli() {
+        let engine = engine();
+        let mut request = pdf_request("/main.typ");
+        request.files = vec!["/main.typ".to_string()];
+        let outcome = engine
+            .compile(request, vec![b"Hello\n#unknown-name here".to_vec()])
+            .unwrap();
+
+        let error = &outcome.response.diagnostics[0];
+        assert_eq!(
+            error.rendered,
+            concat!(
+                "error: unknown variable: unknown-name\n",
+                "  ┌─ /main.typ:2:2\n",
+                "  │\n",
+                "2 │ #unknown-name here\n",
+                "  │  ^^^^^^^^^^^^\n",
+                "  │\n",
+                "  = hint: if you meant to use subtraction, ",
+                "try adding spaces around the minus sign: `unknown - name`",
+            ),
+        );
+    }
+
+    #[test]
+    fn inspects_files_packages_and_fonts() {
+        let mut engine = engine();
+        engine.vfs_put("/b.typ", b"bb".to_vec()).unwrap();
+        engine.vfs_put("/a.typ", b"a".to_vec()).unwrap();
+
+        let inspection = engine.inspect();
+
+        let files: Vec<_> = inspection
+            .files
+            .iter()
+            .map(|entry| (entry.path.as_str(), entry.size))
+            .collect();
+        assert_eq!(files, vec![("/a.typ", 1), ("/b.typ", 2)]);
+        assert!(inspection.packages.is_empty());
+        assert!(
+            inspection
+                .fonts
+                .iter()
+                .any(|family| family.name == "Libertinus Serif" && family.faces > 0),
+            "fonts: {:?}",
+            inspection.fonts
+        );
     }
 }

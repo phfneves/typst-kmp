@@ -25,10 +25,13 @@ public class TypstCompilationException(
                 append("Typst compilation failed")
                 if (errors.isNotEmpty()) {
                     append(':')
-                    errors.forEach { append("\n  ").append(it) }
+                    errors.forEach { error ->
+                        val text = error.rendered.ifEmpty { error.toString() }
+                        append("\n\n").append(text)
+                    }
                 }
                 if (unresolved.isNotEmpty()) {
-                    append("\n  unresolved: ")
+                    append("\n\nunresolved: ")
                     append(
                         unresolved.joinToString(", ") { entry ->
                             when (entry) {

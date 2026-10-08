@@ -10,7 +10,7 @@ use typst::introspection::{EmptyIntrospector, Introspector};
 use typst::layout::Abs;
 use typst::routines::SpanMode;
 use typst::syntax::package::PackageSpec;
-use typst::syntax::{DiagSpan, Span, SyntaxMode};
+use typst::syntax::{DiagSpan, Span, SyntaxMode, VirtualRoot};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Library, LibraryExt, World, WorldExt};
@@ -21,8 +21,8 @@ use typst_svg::SvgOptions;
 
 use crate::pkg;
 use crate::protocol::{
-    CompileRequest, CompileResponse, Diagnostic, EngineConfig, Missing, OutputMeta, OutputSpec,
-    Severity, TracePoint,
+    CompileRequest, CompileResponse, Diagnostic, EngineConfig, FileEntry, FontFamily, Inspection,
+    Missing, OutputMeta, OutputSpec, Severity, TracePoint,
 };
 use crate::vfs::{format_path, parse_path, Vfs};
 use crate::world::KmpWorld;
@@ -104,6 +104,36 @@ impl TypstEngine {
         }
         self.vfs.mark_package_loaded(&spec);
         Ok(count)
+    }
+
+    /// Lists what the engine holds: its files outside packages, its packages and its fonts.
+    pub fn inspect(&self) -> Inspection {
+        let mut files: Vec<FileEntry> = self
+            .vfs
+            .entries()
+            .filter(|(id, _)| matches!(id.get().root(), VirtualRoot::Project))
+            .map(|(id, size)| FileEntry {
+                path: format_path(id),
+                size,
+            })
+            .collect();
+        files.sort_by(|a, b| a.path.cmp(&b.path));
+        let mut packages: Vec<String> = self.vfs.package_specs().map(str::to_string).collect();
+        packages.sort();
+        let mut fonts: Vec<FontFamily> = self
+            .book
+            .families()
+            .map(|(name, faces)| FontFamily {
+                name: name.to_string(),
+                faces: faces.count(),
+            })
+            .collect();
+        fonts.sort_by(|a, b| a.name.cmp(&b.name));
+        Inspection {
+            files,
+            packages,
+            fonts,
+        }
     }
 
     /// Compiles `request`. `files` holds the bytes of [`CompileRequest::files`], in the same
@@ -417,32 +447,125 @@ fn join_messages(prefix: &str, errors: &[SourceDiagnostic]) -> String {
 
 fn convert_diagnostic(world: &KmpWorld<'_>, diag: &SourceDiagnostic) -> Diagnostic {
     let (path, start, end, line, column) = locate(world, diag.span);
+    let severity = match diag.severity {
+        TypstSeverity::Error => Severity::Error,
+        TypstSeverity::Warning => Severity::Warning,
+    };
+    let hints: Vec<String> = diag.hints.iter().map(|hint| hint.v.to_string()).collect();
+    let trace: Vec<TracePoint> = diag
+        .trace
+        .iter()
+        .map(|point| {
+            let (path, _, _, line, column) = locate(world, point.span.into());
+            TracePoint {
+                message: point.v.to_string(),
+                path,
+                line,
+                column,
+            }
+        })
+        .collect();
+    let message = diag.message.to_string();
+    let rendered = render(world, diag.span, severity, &message, &hints, &trace);
     Diagnostic {
-        severity: match diag.severity {
-            TypstSeverity::Error => Severity::Error,
-            TypstSeverity::Warning => Severity::Warning,
-        },
-        message: diag.message.to_string(),
+        severity,
+        message,
         path,
         start,
         end,
         line,
         column,
-        hints: diag.hints.iter().map(|hint| hint.v.to_string()).collect(),
-        trace: diag
-            .trace
-            .iter()
-            .map(|point| {
-                let (path, _, _, line, column) = locate(world, point.span.into());
-                TracePoint {
-                    message: point.v.to_string(),
-                    path,
-                    line,
-                    column,
-                }
-            })
-            .collect(),
+        hints,
+        trace,
+        rendered,
     }
+}
+
+/// Lays a diagnostic out the way the `typst` CLI does, without colour:
+///
+/// ```text
+/// error: unknown variable: foo
+///   ┌─ /main.typ:3:7
+///   │
+/// 3 │ Hello #foo
+///   │        ^^^
+///   │
+///   = hint: …
+/// ```
+fn render(
+    world: &KmpWorld<'_>,
+    span: DiagSpan,
+    severity: Severity,
+    message: &str,
+    hints: &[String],
+    trace: &[TracePoint],
+) -> String {
+    use std::fmt::Write;
+
+    let label = match severity {
+        Severity::Error => "error",
+        Severity::Warning => "warning",
+    };
+    let mut out = format!("{label}: {message}");
+
+    let excerpt = span.id().and_then(|id| {
+        let range = world.range(span)?;
+        let source = world.source(id).ok()?;
+        let lines = source.lines();
+        let line = lines.byte_to_line(range.start)?;
+        let column = lines.byte_to_column(range.start)?;
+        let line_range = lines.line_to_range(line)?;
+        let text = source.text()[line_range.clone()].trim_end_matches(['\r', '\n']);
+        // Underline to the end of the span or of the line, whichever comes first, counting
+        // characters rather than bytes so the carets line up under multi-byte text.
+        let end = range
+            .end
+            .min(line_range.start + text.len())
+            .max(range.start);
+        let width = source.text()[range.start..end].chars().count().max(1);
+        Some((
+            format_path(id),
+            line + 1,
+            column + 1,
+            text.to_string(),
+            column,
+            width,
+        ))
+    });
+
+    let gutter = excerpt
+        .as_ref()
+        .map(|(_, line, ..)| line.to_string().len())
+        .unwrap_or(1);
+    let pad = " ".repeat(gutter);
+
+    if let Some((path, line, column, text, offset, width)) = &excerpt {
+        let _ = write!(out, "\n{pad} ┌─ {path}:{line}:{column}");
+        let _ = write!(out, "\n{pad} │");
+        let _ = write!(out, "\n{line} │ {text}");
+        let _ = write!(
+            out,
+            "\n{pad} │ {}{}",
+            " ".repeat(*offset),
+            "^".repeat(*width)
+        );
+    }
+    if !hints.is_empty() || !trace.is_empty() {
+        if excerpt.is_some() {
+            let _ = write!(out, "\n{pad} │");
+        }
+        for hint in hints {
+            let _ = write!(out, "\n{pad} = hint: {hint}");
+        }
+        for point in trace {
+            let _ = write!(out, "\n{pad} = {}", point.message);
+            if let (Some(path), Some(line), Some(column)) = (&point.path, point.line, point.column)
+            {
+                let _ = write!(out, " ({path}:{line}:{column})");
+            }
+        }
+    }
+    out
 }
 
 /// `(path, startByte, endByte, line, column)` — line and column are 1-based for display.
@@ -488,6 +611,11 @@ fn embedded_fonts() -> Vec<Font> {
 #[cfg(not(feature = "embed-fonts"))]
 fn embedded_fonts() -> Vec<Font> {
     Vec::new()
+}
+
+/// What the engine holds, as JSON. See [`TypstEngine::inspect`].
+pub fn inspect_json(engine: &TypstEngine) -> String {
+    serde_json::to_string(&engine.inspect()).expect("inspection serialises")
 }
 
 /// Parses a compile request and runs it.

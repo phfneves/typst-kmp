@@ -52,6 +52,8 @@ internal actual class NativeEngine private constructor(private val worker: Worke
 
     actual suspend fun vfsClearPackages(): Int = call("vfsClearPackages").count
 
+    actual suspend fun inspect(): String = call("inspect").json
+
     actual suspend fun compile(requestJson: String, files: List<ByteArray>): NativeResult {
         // One buffer and a length table cross to the worker instead of an array of arrays; the
         // engine splits them again on the other side.

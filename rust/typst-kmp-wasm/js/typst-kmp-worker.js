@@ -15,7 +15,7 @@
  *    resolve one relatively.
  *
  * Requests:  { id, op: "init"|"addFont"|"vfsPut"|"vfsPutPackage"|"vfsRemove"|"vfsClearFiles"|
- *                       "vfsClearPackages"|"compile", text?, bytes?, lengths? }
+ *                       "vfsClearPackages"|"inspect"|"compile", text?, bytes?, lengths? }
  *            `lengths` comes with "compile" only: it splits `bytes` into the request's files.
  * Replies:   { id, ok: true, count?, json?, blobs? } | { id, ok: false, error, fatal? }
  */
@@ -80,6 +80,8 @@ async function handle(request) {
             return { count: alive().vfsClearFiles() };
         case 'vfsClearPackages':
             return { count: alive().vfsClearPackages() };
+        case 'inspect':
+            return { json: alive().inspect() };
         case 'compile': {
             // The request's files arrive concatenated in `bytes`, each one's length in `lengths`.
             const lengths = new Uint32Array(request.lengths || []);

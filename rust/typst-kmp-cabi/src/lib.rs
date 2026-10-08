@@ -229,6 +229,22 @@ pub unsafe extern "C" fn typst_kmp_engine_vfs_clear_packages(
     })
 }
 
+/// What the engine holds, as a NUL-terminated UTF-8 JSON string. The caller releases it with
+/// [`typst_kmp_string_free`]. Returns null on failure.
+#[no_mangle]
+pub unsafe extern "C" fn typst_kmp_engine_inspect(
+    engine: *mut TypstKmpEngine,
+    out_error: *mut *mut c_char,
+) -> *mut c_char {
+    guard(out_error, ptr::null_mut(), || {
+        let engine = engine.as_ref().ok_or("engine must not be null")?;
+        let locked = engine.inner.read().map_err(|_| "engine lock poisoned")?;
+        let json = CString::new(typst_kmp_core::inspect_json(&locked))
+            .map_err(|_| "inspection JSON contained an interior NUL byte")?;
+        Ok(json.into_raw())
+    })
+}
+
 // --- compilation -----------------------------------------------------------------------------
 
 /// Compiles a request. Returns null only on a hard failure; a failed *compilation* still yields a

@@ -110,6 +110,12 @@ impl TypstKmpEngine {
         Ok(engine.vfs_clear_packages() as u32)
     }
 
+    /// What the engine holds, as JSON.
+    pub fn inspect(&self) -> Result<String, JsError> {
+        let engine = self.inner.try_borrow().map_err(error_reentrant)?;
+        Ok(typst_kmp_core::inspect_json(&engine))
+    }
+
     /// Compiles a request.
     ///
     /// The bytes of the request's `files` arrive concatenated in `files`, in the order the JSON
