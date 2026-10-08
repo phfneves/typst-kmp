@@ -149,7 +149,12 @@ jobs:
       # The macOS runner images carry no Android SDK, unlike the Linux ones every Android job in
       # gradle.yml runs on — and this job publishes the AAR and the Android klib along with
       # everything else.
+      #
+      # `packages` overrides the action's default of `tools platform-tools`: the legacy `tools`
+      # package is gone from current SDK repositories, and asking for it fails the whole step.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
       # `-Ptypst.prebuiltDir` keeps cargo from running, but AGP still strips the packaged .so files
       # with the NDK's own tools, so :typst-android-native needs one present. Read the pin from the
       # version catalog so this never drifts from the `ndkVersion` that module declares. sed rather
