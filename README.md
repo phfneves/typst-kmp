@@ -4,7 +4,9 @@ The [Typst](https://typst.app) typesetting compiler as a Kotlin Multiplatform li
 binary to install, no subprocess, no server round-trip. The compiler is embedded and runs in
 process on Android, the JVM, iOS, macOS, Linux, Windows and in the browser.
 
-> **Status: alpha.** The current release is `0.1.0-alpha02`; the API may still change.
+> **Status: alpha.** The current release is `0.1.0-alpha02`, embedding Typst 0.15; the API may still
+> change. [CHANGELOG.md](CHANGELOG.md) lists what changed in each release and which Typst version
+> it embeds.
 > The same 13-test `commonTest` suite runs green on the JVM (JNI), on Kotlin/Native (cinterop),
 > on an Android emulator (instrumented) and in a browser on both `js` and `wasmJs`
 > (wasm-bindgen), on top of 15 Rust tests. Each run compiles a real multi-page document and —
@@ -312,6 +314,27 @@ suspend fun render(templateDir: Path, data: ByteArray): ByteArray = typst.compil
 Typst's own memoisation cache is trimmed after every compilation, so it does not grow with the
 number of documents either.
 
+## Fonts
+
+Every instance starts with the fonts embedded in the native library: Libertinus Serif, New Computer
+Modern and DejaVu Sans Mono. Anything else goes in `TypstConfig.fonts` as the bytes of a font file,
+each face of a collection included, or later through `addFont()`. `fontFamilies()` lists what an
+instance can use. A document that names a family missing from that list compiles anyway, with
+Typst's `unknown font family` warning in `CompileResult.warnings`.
+
+Fonts are part of the app, so they ship with it:
+
+* **Android:** put the files under `src/main/assets/fonts/` and read them with
+  `context.assets.open("fonts/Inter.ttf").use { it.readBytes() }`.
+* **iOS:** add the files to the app target in Xcode so they land in the bundle, then read them
+  from Kotlin with `NSBundle.mainBundle.pathForResource("Inter", "ttf")` and
+  `NSData.dataWithContentsOfFile(path)`, copied into a `ByteArray`. A Compose Multiplatform app can
+  use `Res.readBytes("files/fonts/Inter.ttf")` on every platform instead.
+* **JVM:** read them from the classpath with `javaClass.getResourceAsStream(...)`.
+
+Every face stays in memory for the lifetime of the instance, which is one more reason to keep a
+single shared instance.
+
 ## Outputs
 
 `CompileRequest.outputs` accepts any combination; asking for several reuses a single layout pass.
@@ -546,10 +569,13 @@ points at a separate `com.android.library` module as the way out.
 ## Known trade-offs
 
 * **Binary size.** Measured on release builds: 39.8 MB (arm64-v8a), 33.8 MB (armeabi-v7a),
-  43.3 MB (x86_64) and 41.4 MB for the Windows JVM library. Roughly 10 MB of that is the embedded
+  43.3 MB (x86_64), 41.4 MB for the Windows JVM library and 38.4 MB for the macOS one. On
+  Apple targets the library is a 58 MB static archive per architecture, which the linker trims
+  when it builds the app. Roughly 10 MB of that is the embedded
   font bundle — build the Rust crates with `--no-default-features` to drop `embed-fonts` and
   supply fonts through `TypstConfig.fonts` instead. Android apps should rely on ABI splits or app
-  bundles so a device only downloads its own architecture.
+  bundles so a device only downloads its own architecture. PDF, SVG and PNG export are always
+  compiled in: there are no feature flags to drop an output format yet.
 * **The JVM native library ships separately from the classes.** `typst-kmp-jvm` carries only
   bytecode; the JNI library comes from a classifier jar (see [Installation](#installation)). A
   single-platform application downloads one library instead of five, at the cost of one dependency
