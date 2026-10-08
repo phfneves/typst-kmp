@@ -46,6 +46,12 @@ internal actual class NativeEngine private constructor(private val worker: Worke
     actual suspend fun vfsPutPackage(spec: String, archive: ByteArray): Int =
         call("vfsPutPackage", text = spec, bytes = archive).count
 
+    actual suspend fun vfsRemove(path: String): Boolean = call("vfsRemove", text = path).count == 1
+
+    actual suspend fun vfsClearFiles(): Int = call("vfsClearFiles").count
+
+    actual suspend fun vfsClearPackages(): Int = call("vfsClearPackages").count
+
     actual suspend fun compile(requestJson: String): NativeResult {
         val reply = call("compile", text = requestJson)
         return NativeResult(reply.json, reply.blobs)

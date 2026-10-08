@@ -30,6 +30,12 @@ internal object TypstNative {
 
     external fun vfsPutPackage(handle: Long, spec: String, data: ByteArray): Int
 
+    external fun vfsRemove(handle: Long, path: String): Boolean
+
+    external fun vfsClearFiles(handle: Long): Int
+
+    external fun vfsClearPackages(handle: Long): Int
+
     /** Returns `arrayOf(responseJson: String, blobs: Array<ByteArray>)`. */
     external fun compile(handle: Long, requestJson: String): Array<Any>
 
@@ -48,6 +54,12 @@ internal actual class NativeEngine private constructor(configJson: String) {
 
     actual suspend fun vfsPutPackage(spec: String, archive: ByteArray): Int =
         TypstNative.vfsPutPackage(alive(), spec, archive)
+
+    actual suspend fun vfsRemove(path: String): Boolean = TypstNative.vfsRemove(alive(), path)
+
+    actual suspend fun vfsClearFiles(): Int = TypstNative.vfsClearFiles(alive())
+
+    actual suspend fun vfsClearPackages(): Int = TypstNative.vfsClearPackages(alive())
 
     actual suspend fun compile(requestJson: String): NativeResult {
         val raw = TypstNative.compile(alive(), requestJson)

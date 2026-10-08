@@ -11,7 +11,13 @@ package io.github.phfneves.typst
 public class CompileRequest(
     /** Entry point, as a VFS path. */
     public val main: String = "/main.typ",
-    /** Files seeded into the VFS before compiling. Keys are VFS paths such as `/chapters/one.typ`. */
+    /**
+     * Files written into the VFS before compiling, replacing whatever was at those paths. Keys
+     * are VFS paths such as `/chapters/one.typ`.
+     *
+     * They stay in the VFS after the compilation, like everything else there, until replaced or
+     * removed with [Typst.removeFile] or [Typst.clearFiles].
+     */
     public val files: Map<String, ByteArray> = emptyMap(),
     /** Values reachable from the document through `sys.inputs`. */
     public val inputs: Map<String, String> = emptyMap(),

@@ -11,7 +11,13 @@ public class TypstConfig(
     public val embedDefaultFonts: Boolean = true,
     /** Extra font files registered at startup. Every face in each file is picked up. */
     public val fonts: List<ByteArray> = emptyList(),
-    /** Supplies files the document imports but the request did not include. */
+    /**
+     * Supplies files the document reads but the request did not include.
+     *
+     * What it returns is kept in the VFS, and the same path is not asked for again until
+     * [Typst.removeFile] or [Typst.clearFiles] removes it. Serve files that change under the same
+     * path through [CompileRequest.files] instead.
+     */
     public val fileResolver: FileResolver? = null,
     /** Supplies `.tar.gz` archives for `@namespace/name:version` imports. */
     public val packageResolver: PackageResolver? = null,
@@ -40,12 +46,18 @@ public class TypstConfig(
  *
  * Return `null` for paths you do not serve; the compilation then fails with the path listed in
  * [CompileResult.Failure.unresolved].
+ *
+ * It runs while the compilation holds its [Typst] instance, so it must not call that instance.
  */
 public fun interface FileResolver {
     public suspend fun resolve(path: String): ByteArray?
 }
 
-/** Supplies the `.tar.gz` archive of a Typst package. */
+/**
+ * Supplies the `.tar.gz` archive of a Typst package.
+ *
+ * It runs while the compilation holds its [Typst] instance, so it must not call that instance.
+ */
 public fun interface PackageResolver {
     public suspend fun resolve(spec: PackageSpec): ByteArray?
 }

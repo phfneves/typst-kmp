@@ -89,6 +89,27 @@ impl TypstKmpEngine {
             .map_err(error)
     }
 
+    /// Removes one file from the virtual file system. Returns whether it was there.
+    #[wasm_bindgen(js_name = vfsRemove)]
+    pub fn vfs_remove(&self, path: &str) -> Result<bool, JsError> {
+        let mut engine = self.inner.try_borrow_mut().map_err(error_reentrant)?;
+        engine.vfs_remove(path).map_err(error)
+    }
+
+    /// Removes every project file, keeping packages. Returns how many were removed.
+    #[wasm_bindgen(js_name = vfsClearFiles)]
+    pub fn vfs_clear_files(&self) -> Result<u32, JsError> {
+        let mut engine = self.inner.try_borrow_mut().map_err(error_reentrant)?;
+        Ok(engine.vfs_clear_files() as u32)
+    }
+
+    /// Removes every package. Returns how many packages were removed.
+    #[wasm_bindgen(js_name = vfsClearPackages)]
+    pub fn vfs_clear_packages(&self) -> Result<u32, JsError> {
+        let mut engine = self.inner.try_borrow_mut().map_err(error_reentrant)?;
+        Ok(engine.vfs_clear_packages() as u32)
+    }
+
     /// Compiles a request.
     ///
     /// Throws only on a hard failure; a failed *compilation* still yields a result whose JSON

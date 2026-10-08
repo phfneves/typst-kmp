@@ -10,7 +10,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Mutex;
 
 use jni::objects::{JByteArray, JObject, JObjectArray, JString};
-use jni::sys::{jint, jlong, jobjectArray};
+use jni::sys::{jboolean, jint, jlong, jobjectArray, JNI_FALSE, JNI_TRUE};
 use jni::JNIEnv;
 use typst_kmp_core::{CompileOutcome, TypstEngine};
 
@@ -140,6 +140,53 @@ pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_vfsPut
         let engine = unsafe { engine(handle) }?;
         let mut locked = engine.lock().map_err(|_| "engine lock poisoned")?;
         Ok(locked.vfs_put_package(&spec, &archive)? as jint)
+    })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_vfsRemove<'local>(
+    mut env: JNIEnv<'local>,
+    _this: JObject<'local>,
+    handle: jlong,
+    path: JString<'local>,
+) -> jboolean {
+    guard(&mut env, JNI_FALSE, |env| {
+        let path = read_string(env, &path, "path")?;
+        let engine = unsafe { engine(handle) }?;
+        let mut locked = engine.lock().map_err(|_| "engine lock poisoned")?;
+        Ok(if locked.vfs_remove(&path)? {
+            JNI_TRUE
+        } else {
+            JNI_FALSE
+        })
+    })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_vfsClearFiles<'local>(
+    mut env: JNIEnv<'local>,
+    _this: JObject<'local>,
+    handle: jlong,
+) -> jint {
+    guard(&mut env, -1, |_| {
+        let engine = unsafe { engine(handle) }?;
+        let mut locked = engine.lock().map_err(|_| "engine lock poisoned")?;
+        Ok(locked.vfs_clear_files() as jint)
+    })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_vfsClearPackages<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _this: JObject<'local>,
+    handle: jlong,
+) -> jint {
+    guard(&mut env, -1, |_| {
+        let engine = unsafe { engine(handle) }?;
+        let mut locked = engine.lock().map_err(|_| "engine lock poisoned")?;
+        Ok(locked.vfs_clear_packages() as jint)
     })
 }
 

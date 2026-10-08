@@ -14,7 +14,8 @@
  *  * A `blob:` URL has no useful base, so every URL arriving here is already absolute. Never
  *    resolve one relatively.
  *
- * Requests:  { id, op: "init"|"addFont"|"vfsPut"|"vfsPutPackage"|"compile", text?, bytes? }
+ * Requests:  { id, op: "init"|"addFont"|"vfsPut"|"vfsPutPackage"|"vfsRemove"|"vfsClearFiles"|
+ *                       "vfsClearPackages"|"compile", text?, bytes? }
  * Replies:   { id, ok: true, count?, json?, blobs? } | { id, ok: false, error, fatal? }
  */
 
@@ -72,6 +73,12 @@ async function handle(request) {
             return {};
         case 'vfsPutPackage':
             return { count: alive().vfsPutPackage(request.text, bytesOf(request)) };
+        case 'vfsRemove':
+            return { count: alive().vfsRemove(request.text) ? 1 : 0 };
+        case 'vfsClearFiles':
+            return { count: alive().vfsClearFiles() };
+        case 'vfsClearPackages':
+            return { count: alive().vfsClearPackages() };
         case 'compile': {
             const result = alive().compile(request.text);
             try {

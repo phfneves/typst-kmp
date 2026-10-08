@@ -1,9 +1,14 @@
 package io.github.phfneves.typst
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -141,5 +146,100 @@ class TypstTest {
 
         val error = kotlin.runCatching { typst.compile(CompileRequest.of("hello")) }
         assertTrue(error.isFailure, "expected compiling on a closed engine to fail")
+    }
+
+    @Test
+    fun concurrentCompilationsSharingAPathDoNotSeeEachOthersFiles() = runTest {
+        Typst.create().use { typst ->
+            val values = coroutineScope {
+                (1..6).map { index ->
+                    async {
+                        val result = typst.compile(
+                            CompileRequest(
+                                files = mapOf(
+                                    "/main.typ" to "#metadata(\"v$index\") <v>".encodeToByteArray(),
+                                ),
+                                outputs = listOf(OutputFormat.Query("<v>", field = "value", one = true)),
+                            ),
+                        )
+                        assertIs<CompileResult.Success>(result)
+                            .outputs
+                            .filterIsInstance<Output.Query>()
+                            .single()
+                            .json
+                    }
+                }.awaitAll()
+            }
+
+            assertEquals((1..6).map { "\"v$it\"" }, values)
+        }
+    }
+
+    @Test
+    fun keepsResolvedFilesUntilTheyAreRemoved() = runTest {
+        var calls = 0
+        val config = TypstConfig(
+            fileResolver = { path ->
+                calls++
+                if (path == "/helpers.typ") "#let x = 1".encodeToByteArray() else null
+            },
+        )
+
+        Typst.create(config).use { typst ->
+            val request = CompileRequest.of("#import \"/helpers.typ\": x\n#x")
+            assertIs<CompileResult.Success>(typst.compile(request))
+            assertIs<CompileResult.Success>(typst.compile(request))
+            assertEquals(1, calls, "a resolved file should be kept")
+
+            assertTrue(typst.removeFile("/helpers.typ"))
+            assertFalse(typst.removeFile("/helpers.typ"))
+
+            assertIs<CompileResult.Success>(typst.compile(request))
+            assertEquals(2, calls, "a removed file should be resolved again")
+        }
+    }
+
+    @Test
+    fun clearFilesRemovesRequestAndResolvedFiles() = runTest {
+        val config = TypstConfig(
+            fileResolver = FileResolver(mapOf("/helpers.typ" to "#let x = 1".encodeToByteArray())),
+        )
+
+        Typst.create(config).use { typst ->
+            assertIs<CompileResult.Success>(
+                typst.compile(CompileRequest.of("#import \"/helpers.typ\": x\n#x")),
+            )
+
+            assertEquals(2, typst.clearFiles())
+            assertEquals(0, typst.clearFiles())
+
+            val failure = assertIs<CompileResult.Failure>(typst.compile(CompileRequest()))
+            assertContains(failure.unresolved, Unresolved.File("/main.typ"))
+        }
+    }
+
+    @Test
+    fun clearPackagesWithNothingLoadedRemovesNothing() = runTest {
+        Typst.create().use { typst ->
+            assertEquals(0, typst.clearPackages())
+        }
+    }
+
+    @Test
+    fun closingDuringACompilationLetsItFinish() = runTest {
+        lateinit var typst: Typst
+        val config = TypstConfig(
+            fileResolver = { path ->
+                // Closes the instance while the compilation is in the middle of using it.
+                typst.close()
+                if (path == "/helpers.typ") "#let x = 1".encodeToByteArray() else null
+            },
+        )
+        typst = Typst.create(config)
+
+        val result = typst.compile(CompileRequest.of("#import \"/helpers.typ\": x\n#x"))
+
+        assertIs<CompileResult.Success>(result)
+        assertFailsWith<IllegalStateException> { typst.compile(CompileRequest.of("hello")) }
     }
 }

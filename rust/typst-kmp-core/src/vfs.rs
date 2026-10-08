@@ -93,6 +93,40 @@ impl Vfs {
             .remove(&id);
     }
 
+    /// Removes one file. Returns whether it was there.
+    pub fn remove(&mut self, id: FileId) -> bool {
+        self.sources
+            .get_mut()
+            .expect("vfs source cache poisoned")
+            .remove(&id);
+        self.files.remove(&id).is_some()
+    }
+
+    /// Removes every file in the project root, keeping packages. Returns how many were removed.
+    pub fn clear_project(&mut self) -> usize {
+        self.remove_where(|id| matches!(id.get().root(), VirtualRoot::Project))
+    }
+
+    /// Removes every package, so the next import of one asks the resolver again. Returns how many
+    /// packages were removed.
+    pub fn clear_packages(&mut self) -> usize {
+        self.remove_where(|id| matches!(id.get().root(), VirtualRoot::Package(_)));
+        let count = self.packages.len();
+        self.packages.clear();
+        count
+    }
+
+    /// Drops every file for which `remove` holds, with its parsed source. Returns how many went.
+    fn remove_where(&mut self, remove: impl Fn(FileId) -> bool) -> usize {
+        let before = self.files.len();
+        self.files.retain(|id, _| !remove(*id));
+        self.sources
+            .get_mut()
+            .expect("vfs source cache poisoned")
+            .retain(|id, _| !remove(*id));
+        before - self.files.len()
+    }
+
     pub fn contains(&self, id: FileId) -> bool {
         self.files.contains_key(&id)
     }
@@ -154,6 +188,46 @@ mod tests {
     fn package_paths_round_trip() {
         let id = parse_path("@preview/cetz:0.3.0/src/lib.typ").unwrap();
         assert_eq!(format_path(id), "@preview/cetz:0.3.0/src/lib.typ");
+    }
+
+    fn put(vfs: &mut Vfs, path: &str) {
+        vfs.insert(parse_path(path).unwrap(), Bytes::new(b"x".to_vec()));
+    }
+
+    #[test]
+    fn remove_reports_whether_the_file_was_there() {
+        let mut vfs = Vfs::new();
+        put(&mut vfs, "/a.typ");
+        let id = parse_path("/a.typ").unwrap();
+        vfs.source(id).unwrap();
+
+        assert!(vfs.remove(id));
+        assert!(!vfs.contains(id));
+        assert!(
+            vfs.source(id).is_err(),
+            "the parsed source must go with the file"
+        );
+        assert!(!vfs.remove(id));
+    }
+
+    #[test]
+    fn clearing_files_keeps_packages_and_the_reverse() {
+        let mut vfs = Vfs::new();
+        put(&mut vfs, "/a.typ");
+        put(&mut vfs, "/img/b.png");
+        put(&mut vfs, "@preview/cetz:0.3.0/lib.typ");
+        let spec: PackageSpec = "@preview/cetz:0.3.0".parse().unwrap();
+        vfs.mark_package_loaded(&spec);
+
+        assert_eq!(vfs.clear_project(), 2);
+        assert!(vfs.contains(parse_path("@preview/cetz:0.3.0/lib.typ").unwrap()));
+        assert!(vfs.has_package(&spec));
+
+        put(&mut vfs, "/a.typ");
+        assert_eq!(vfs.clear_packages(), 1);
+        assert!(!vfs.has_package(&spec));
+        assert!(!vfs.contains(parse_path("@preview/cetz:0.3.0/lib.typ").unwrap()));
+        assert!(vfs.contains(parse_path("/a.typ").unwrap()));
     }
 
     #[test]

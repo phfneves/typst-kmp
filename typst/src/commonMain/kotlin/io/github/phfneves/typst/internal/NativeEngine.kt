@@ -22,6 +22,15 @@ internal expect class NativeEngine {
     /** Unpacks a `.tar.gz` package archive; returns how many files it contained. */
     suspend fun vfsPutPackage(spec: String, archive: ByteArray): Int
 
+    /** Removes one file; returns whether it was there. */
+    suspend fun vfsRemove(path: String): Boolean
+
+    /** Removes every project file, keeping packages; returns how many were removed. */
+    suspend fun vfsClearFiles(): Int
+
+    /** Removes every package; returns how many packages were removed. */
+    suspend fun vfsClearPackages(): Int
+
     suspend fun compile(requestJson: String): NativeResult
 
     fun close()

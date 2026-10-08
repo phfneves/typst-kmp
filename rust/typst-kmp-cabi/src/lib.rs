@@ -185,6 +185,48 @@ pub unsafe extern "C" fn typst_kmp_engine_vfs_put_package(
     })
 }
 
+/// Removes one file from the virtual file system. Returns 1 if it was there, 0 if it was not, or
+/// -1 on failure.
+#[no_mangle]
+pub unsafe extern "C" fn typst_kmp_engine_vfs_remove(
+    engine: *mut TypstKmpEngine,
+    path: *const c_char,
+    out_error: *mut *mut c_char,
+) -> c_int {
+    guard(out_error, ERR, || {
+        let engine = engine.as_ref().ok_or("engine must not be null")?;
+        let path = as_str(path, "path")?;
+        let mut locked = engine.inner.lock().map_err(|_| "engine lock poisoned")?;
+        Ok(locked.vfs_remove(path)? as c_int)
+    })
+}
+
+/// Removes every project file, keeping packages. Returns how many were removed, or -1.
+#[no_mangle]
+pub unsafe extern "C" fn typst_kmp_engine_vfs_clear_files(
+    engine: *mut TypstKmpEngine,
+    out_error: *mut *mut c_char,
+) -> c_int {
+    guard(out_error, ERR, || {
+        let engine = engine.as_ref().ok_or("engine must not be null")?;
+        let mut locked = engine.inner.lock().map_err(|_| "engine lock poisoned")?;
+        Ok(locked.vfs_clear_files() as c_int)
+    })
+}
+
+/// Removes every package. Returns how many packages were removed, or -1.
+#[no_mangle]
+pub unsafe extern "C" fn typst_kmp_engine_vfs_clear_packages(
+    engine: *mut TypstKmpEngine,
+    out_error: *mut *mut c_char,
+) -> c_int {
+    guard(out_error, ERR, || {
+        let engine = engine.as_ref().ok_or("engine must not be null")?;
+        let mut locked = engine.inner.lock().map_err(|_| "engine lock poisoned")?;
+        Ok(locked.vfs_clear_packages() as c_int)
+    })
+}
+
 // --- compilation -----------------------------------------------------------------------------
 
 /// Compiles a request. Returns null only on a hard failure; a failed *compilation* still yields a

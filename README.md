@@ -253,6 +253,55 @@ val config = TypstConfig(
 )
 ```
 
+### Sharing an instance
+
+`Typst.create()` loads every font, so create one instance and share it across the application. It
+is safe to call from any coroutine or thread. The instance runs one operation at a time: a
+compilation holds it from writing `CompileRequest.files` to producing its last output, so two
+compilations that both write `/main.typ` or `/data.json` never see each other's files. They queue
+rather than run in parallel; for throughput, keep a small pool of instances instead.
+
+Resolvers run while the compilation holds the instance, so a resolver must not call back into it.
+
+`close()` is safe at any time. A compilation already running finishes first and the engine is
+released when it returns; any call made after that fails with `IllegalStateException`.
+
+### What stays in the virtual file system
+
+The virtual file system belongs to the instance and outlives each compilation:
+
+| Source | Lifetime |
+| --- | --- |
+| `CompileRequest.files` | written before every compilation, replacing what was at those paths, then kept |
+| `fileResolver` | kept; the resolver is not asked for that path again |
+| `packageResolver` | kept; a published package version never changes |
+
+That gives two rules:
+
+* **Data that changes goes in the request.** A JSON payload, a generated chart, a photo that can be
+  replaced under the same path: pass them in `CompileRequest.files`. Served through the resolver,
+  only the first version would ever be read.
+* **Clear what accumulates.** Nothing is removed on its own, so documents that keep bringing new
+  paths, such as one image per record, grow the instance's memory with every compilation.
+  `clearFiles()` removes every file but keeps fonts and packages. Calling it after each compilation
+  costs no more than resolving those files again. `removeFile(path)` drops a single file and
+  `clearPackages()` drops the packages.
+
+```kotlin
+val typst = Typst.create(TypstConfig(fonts = fonts, fileResolver = images))
+
+suspend fun render(data: ByteArray): ByteArray {
+    val result = typst.compile(
+        CompileRequest(files = mapOf("/main.typ" to template, "/data.json" to data)),
+    )
+    typst.clearFiles()
+    return result.getOrThrow().filterIsInstance<Output.Pdf>().single().bytes
+}
+```
+
+Typst's own memoisation cache is trimmed after every compilation, so it does not grow with the
+number of documents either.
+
 ## Outputs
 
 `CompileRequest.outputs` accepts any combination; asking for several reuses a single layout pass.

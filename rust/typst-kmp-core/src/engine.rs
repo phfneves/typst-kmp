@@ -33,6 +33,9 @@ pub struct CompileOutcome {
     pub blobs: Vec<Vec<u8>>,
 }
 
+/// How many compilations a memoised result may go unused before it is evicted.
+const CACHE_MAX_AGE: usize = 10;
+
 pub struct TypstEngine {
     fonts: Vec<Font>,
     book: LazyHash<FontBook>,
@@ -67,6 +70,21 @@ impl TypstEngine {
         Ok(())
     }
 
+    /// Removes one file, project or package. Returns whether it was there.
+    pub fn vfs_remove(&mut self, path: &str) -> Result<bool, String> {
+        Ok(self.vfs.remove(parse_path(path)?))
+    }
+
+    /// Removes every project file, keeping packages and fonts. Returns how many were removed.
+    pub fn vfs_clear_files(&mut self) -> usize {
+        self.vfs.clear_project()
+    }
+
+    /// Removes every package. Returns how many packages were removed.
+    pub fn vfs_clear_packages(&mut self) -> usize {
+        self.vfs.clear_packages()
+    }
+
     /// Unpacks a `.tar.gz` package archive into the VFS under `@<namespace>/<name>:<version>/`.
     pub fn vfs_put_package(&mut self, spec: &str, archive: &[u8]) -> Result<usize, String> {
         let spec: PackageSpec = spec
@@ -89,6 +107,15 @@ impl TypstEngine {
     }
 
     pub fn compile(&self, request: CompileRequest) -> Result<CompileOutcome, String> {
+        let outcome = self.compile_uncached(request);
+        // Typst memoises layout and evaluation in a process-wide cache that only shrinks when
+        // asked to. Drop whatever went unused for a few compilations, as `typst watch` does, so
+        // a long-lived engine does not grow without bound.
+        typst::comemo::evict(CACHE_MAX_AGE);
+        outcome
+    }
+
+    fn compile_uncached(&self, request: CompileRequest) -> Result<CompileOutcome, String> {
         let main = parse_path(&request.main)?;
         if !self.vfs.contains(main) {
             // Report this like any other miss so the Kotlin resolution loop can fetch it.

@@ -5,8 +5,11 @@ import io.github.phfneves.typst.cinterop.typst_kmp_compile
 import io.github.phfneves.typst.cinterop.typst_kmp_engine_add_font
 import io.github.phfneves.typst.cinterop.typst_kmp_engine_free
 import io.github.phfneves.typst.cinterop.typst_kmp_engine_new
+import io.github.phfneves.typst.cinterop.typst_kmp_engine_vfs_clear_files
+import io.github.phfneves.typst.cinterop.typst_kmp_engine_vfs_clear_packages
 import io.github.phfneves.typst.cinterop.typst_kmp_engine_vfs_put
 import io.github.phfneves.typst.cinterop.typst_kmp_engine_vfs_put_package
+import io.github.phfneves.typst.cinterop.typst_kmp_engine_vfs_remove
 import io.github.phfneves.typst.cinterop.typst_kmp_result_blob
 import io.github.phfneves.typst.cinterop.typst_kmp_result_blob_count
 import io.github.phfneves.typst.cinterop.typst_kmp_result_free
@@ -61,6 +64,27 @@ internal actual class NativeEngine private constructor(configJson: String) {
             typst_kmp_engine_vfs_put_package(alive(), spec, pointer, length, error.ptr)
         }
         if (count < 0) fail(error, "Failed to unpack the package $spec.")
+        count
+    }
+
+    actual suspend fun vfsRemove(path: String): Boolean = memScoped {
+        val error = alloc<CPointerVar<ByteVar>>()
+        val status = typst_kmp_engine_vfs_remove(alive(), path, error.ptr)
+        if (status < 0) fail(error, "Failed to remove $path from the virtual file system.")
+        status == 1
+    }
+
+    actual suspend fun vfsClearFiles(): Int = memScoped {
+        val error = alloc<CPointerVar<ByteVar>>()
+        val count = typst_kmp_engine_vfs_clear_files(alive(), error.ptr)
+        if (count < 0) fail(error, "Failed to clear the virtual file system.")
+        count
+    }
+
+    actual suspend fun vfsClearPackages(): Int = memScoped {
+        val error = alloc<CPointerVar<ByteVar>>()
+        val count = typst_kmp_engine_vfs_clear_packages(alive(), error.ptr)
+        if (count < 0) fail(error, "Failed to clear the packages.")
         count
     }
 
