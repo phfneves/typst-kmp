@@ -32,6 +32,10 @@ impl Default for EngineConfig {
 pub struct CompileRequest {
     /// VFS path of the entry point, e.g. `/main.typ`.
     pub main: String,
+    /// Paths of the files that exist for this compilation only. Their bytes travel out of band,
+    /// as input blobs in the same order, and shadow whatever the engine's VFS holds at that path.
+    #[serde(default)]
+    pub files: Vec<String>,
     /// Values exposed to the document through `sys.inputs`.
     #[serde(default)]
     pub inputs: BTreeMap<String, String>,

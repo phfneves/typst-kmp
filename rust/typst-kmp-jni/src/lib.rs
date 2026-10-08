@@ -7,7 +7,7 @@
 //! unwinding out of a native frame into the JVM is undefined behaviour.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::Mutex;
+use std::sync::RwLock;
 
 use jni::objects::{JByteArray, JObject, JObjectArray, JString};
 use jni::sys::{jboolean, jint, jlong, jobjectArray, JNI_FALSE, JNI_TRUE};
@@ -16,7 +16,9 @@ use typst_kmp_core::{CompileOutcome, TypstEngine};
 
 const EXCEPTION: &str = "io/github/phfneves/typst/TypstNativeException";
 
-type Handle = Mutex<TypstEngine>;
+/// Compilations only read the engine, so they share the lock and run in parallel; anything that
+/// changes fonts or the VFS takes it exclusively.
+type Handle = RwLock<TypstEngine>;
 
 /// Runs `body`, turning both `Err` and panics into a thrown Java exception and returning
 /// `failure` to the caller.
@@ -67,6 +69,23 @@ fn read_bytes(env: &mut JNIEnv<'_>, value: &JByteArray<'_>) -> Result<Vec<u8>, S
         .map_err(|err| format!("failed to read byte array: {err}"))
 }
 
+fn read_byte_arrays(
+    env: &mut JNIEnv<'_>,
+    value: &JObjectArray<'_>,
+) -> Result<Vec<Vec<u8>>, String> {
+    let length = env
+        .get_array_length(value)
+        .map_err(|err| format!("failed to read file array length: {err}"))?;
+    (0..length)
+        .map(|index| {
+            let element = env
+                .get_object_array_element(value, index)
+                .map_err(|err| format!("failed to read file {index}: {err}"))?;
+            read_bytes(env, &JByteArray::from(element))
+        })
+        .collect()
+}
+
 #[no_mangle]
 pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_engineNew<'local>(
     mut env: JNIEnv<'local>,
@@ -76,7 +95,7 @@ pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_engine
     guard(&mut env, 0, |env| {
         let config = read_string(env, &config_json, "config JSON")?;
         let engine = typst_kmp_core::engine_from_json(&config)?;
-        Ok(Box::into_raw(Box::new(Mutex::new(engine))) as jlong)
+        Ok(Box::into_raw(Box::new(RwLock::new(engine))) as jlong)
     })
 }
 
@@ -104,7 +123,7 @@ pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_engine
     guard(&mut env, -1, |env| {
         let bytes = read_bytes(env, &data)?;
         let engine = unsafe { engine(handle) }?;
-        let mut locked = engine.lock().map_err(|_| "engine lock poisoned")?;
+        let mut locked = engine.write().map_err(|_| "engine lock poisoned")?;
         Ok(locked.add_font(bytes) as jint)
     })
 }
@@ -121,7 +140,7 @@ pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_vfsPut
         let path = read_string(env, &path, "path")?;
         let bytes = read_bytes(env, &data)?;
         let engine = unsafe { engine(handle) }?;
-        let mut locked = engine.lock().map_err(|_| "engine lock poisoned")?;
+        let mut locked = engine.write().map_err(|_| "engine lock poisoned")?;
         locked.vfs_put(&path, bytes)
     })
 }
@@ -138,7 +157,7 @@ pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_vfsPut
         let spec = read_string(env, &spec, "package spec")?;
         let archive = read_bytes(env, &data)?;
         let engine = unsafe { engine(handle) }?;
-        let mut locked = engine.lock().map_err(|_| "engine lock poisoned")?;
+        let mut locked = engine.write().map_err(|_| "engine lock poisoned")?;
         Ok(locked.vfs_put_package(&spec, &archive)? as jint)
     })
 }
@@ -153,7 +172,7 @@ pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_vfsRem
     guard(&mut env, JNI_FALSE, |env| {
         let path = read_string(env, &path, "path")?;
         let engine = unsafe { engine(handle) }?;
-        let mut locked = engine.lock().map_err(|_| "engine lock poisoned")?;
+        let mut locked = engine.write().map_err(|_| "engine lock poisoned")?;
         Ok(if locked.vfs_remove(&path)? {
             JNI_TRUE
         } else {
@@ -170,7 +189,7 @@ pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_vfsCle
 ) -> jint {
     guard(&mut env, -1, |_| {
         let engine = unsafe { engine(handle) }?;
-        let mut locked = engine.lock().map_err(|_| "engine lock poisoned")?;
+        let mut locked = engine.write().map_err(|_| "engine lock poisoned")?;
         Ok(locked.vfs_clear_files() as jint)
     })
 }
@@ -185,7 +204,7 @@ pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_vfsCle
 ) -> jint {
     guard(&mut env, -1, |_| {
         let engine = unsafe { engine(handle) }?;
-        let mut locked = engine.lock().map_err(|_| "engine lock poisoned")?;
+        let mut locked = engine.write().map_err(|_| "engine lock poisoned")?;
         Ok(locked.vfs_clear_packages() as jint)
     })
 }
@@ -200,13 +219,16 @@ pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_compil
     _this: JObject<'local>,
     handle: jlong,
     request_json: JString<'local>,
+    files: JObjectArray<'local>,
 ) -> jobjectArray {
     let null = JObject::null().into_raw();
     guard(&mut env, null, |env| {
         let request = read_string(env, &request_json, "request JSON")?;
+        let files = read_byte_arrays(env, &files)?;
         let engine = unsafe { engine(handle) }?;
-        let locked = engine.lock().map_err(|_| "engine lock poisoned")?;
-        let CompileOutcome { response, blobs } = typst_kmp_core::compile_json(&locked, &request)?;
+        let locked = engine.read().map_err(|_| "engine lock poisoned")?;
+        let CompileOutcome { response, blobs } =
+            typst_kmp_core::compile_json(&locked, &request, files)?;
         drop(locked);
 
         let json = env

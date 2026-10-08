@@ -200,7 +200,7 @@ class TypstTest {
     }
 
     @Test
-    fun clearFilesRemovesRequestAndResolvedFiles() = runTest {
+    fun clearFilesRemovesResolvedFiles() = runTest {
         val config = TypstConfig(
             fileResolver = FileResolver(mapOf("/helpers.typ" to "#let x = 1".encodeToByteArray())),
         )
@@ -210,11 +210,102 @@ class TypstTest {
                 typst.compile(CompileRequest.of("#import \"/helpers.typ\": x\n#x")),
             )
 
-            assertEquals(2, typst.clearFiles())
+            assertEquals(1, typst.clearFiles(), "only the resolved file is the instance's")
             assertEquals(0, typst.clearFiles())
+        }
+    }
+
+    @Test
+    fun requestFilesDoNotOutliveTheCompilation() = runTest {
+        Typst.create().use { typst ->
+            assertIs<CompileResult.Success>(typst.compile(CompileRequest.of("hello")))
 
             val failure = assertIs<CompileResult.Failure>(typst.compile(CompileRequest()))
             assertContains(failure.unresolved, Unresolved.File("/main.typ"))
+            assertEquals(0, typst.clearFiles())
+        }
+    }
+
+    @Test
+    fun theRequestResolverComesFirstAndLeavesNothingBehind() = runTest {
+        val config = TypstConfig(
+            fileResolver = FileResolver(
+                mapOf(
+                    "/name.typ" to "#let name = \"instance\"".encodeToByteArray(),
+                    "/shared.typ" to "#let shared = \"shared\"".encodeToByteArray(),
+                ),
+            ),
+        )
+        val request = CompileRequest(
+            files = mapOf(
+                "/main.typ" to """
+                    #import "/name.typ": name
+                    #import "/shared.typ": shared
+                    #metadata(name + "/" + shared) <v>
+                """.trimIndent().encodeToByteArray(),
+            ),
+            outputs = listOf(OutputFormat.Query("<v>", field = "value", one = true)),
+            fileResolver = FileResolver(
+                mapOf("/name.typ" to "#let name = \"request\"".encodeToByteArray()),
+            ),
+        )
+
+        Typst.create(config).use { typst ->
+            val query = assertIs<CompileResult.Success>(typst.compile(request))
+                .outputs
+                .filterIsInstance<Output.Query>()
+                .single()
+
+            assertEquals("\"request/shared\"", query.json)
+            assertFalse(typst.removeFile("/name.typ"), "the request's file must not be kept")
+            assertTrue(typst.removeFile("/shared.typ"), "the instance's file is kept")
+        }
+    }
+
+    @Test
+    fun resolvesADeepImportChainWithoutABound() = runTest {
+        val depth = 20
+        val files = (1..depth).associate { level ->
+            val body = if (level == depth) {
+                "#let value = $level"
+            } else {
+                "#import \"/level${level + 1}.typ\": value"
+            }
+            "/level$level.typ" to body.encodeToByteArray()
+        }
+
+        Typst.create(TypstConfig(fileResolver = FileResolver(files))).use { typst ->
+            val pdf = typst.compilePdf(
+                CompileRequest.of("#import \"/level1.typ\": value\n#value"),
+            )
+            assertTrue(pdf.decodeToString(0, 5).startsWith("%PDF-"), "not a PDF")
+        }
+    }
+
+    @Test
+    fun aResolverMayCallBackIntoTheInstance() = runTest {
+        lateinit var typst: Typst
+        val config = TypstConfig(
+            fileResolver = { path ->
+                typst.clearPackages()
+                if (path == "/helpers.typ") "#let x = 1".encodeToByteArray() else null
+            },
+        )
+        typst = Typst.create(config)
+        typst.use {
+            assertIs<CompileResult.Success>(
+                it.compile(CompileRequest.of("#import \"/helpers.typ\": x\n#x")),
+            )
+        }
+    }
+
+    @Test
+    fun compilePdfThrowsOnFailure() = runTest {
+        Typst.create().use { typst ->
+            val error = assertFailsWith<TypstCompilationException> {
+                typst.compilePdf(CompileRequest.of("#panic(\"boom\")"))
+            }
+            assertEquals(1, error.errors.size)
         }
     }
 

@@ -36,6 +36,8 @@ internal class WireEngineConfig(val embedDefaultFonts: Boolean)
 @Serializable
 internal class WireRequest(
     val main: String,
+    /** Paths of the request's own files; their bytes travel alongside, in this order. */
+    val files: List<String>,
     val inputs: Map<String, String>,
     val outputs: List<WireOutputSpec>,
     val now: WireDate? = null,
@@ -143,9 +145,10 @@ internal sealed class WireMissing {
 internal fun encodeConfig(config: TypstConfig): String =
     json.encodeToString(WireEngineConfig(config.embedDefaultFonts))
 
-internal fun encodeRequest(request: CompileRequest): String = json.encodeToString(
+internal fun encodeRequest(request: CompileRequest, files: List<String>): String = json.encodeToString(
     WireRequest(
         main = request.main,
+        files = files,
         inputs = request.inputs,
         outputs = request.outputs.map { it.toWire() },
         now = request.now?.let {

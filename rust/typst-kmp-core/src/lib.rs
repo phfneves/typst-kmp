@@ -52,6 +52,7 @@ mod tests {
     fn pdf_request(main: &str) -> CompileRequest {
         CompileRequest {
             main: main.to_string(),
+            files: Vec::new(),
             inputs: Default::default(),
             outputs: vec![OutputSpec::Pdf {
                 ident: None,
@@ -75,7 +76,9 @@ mod tests {
             )
             .unwrap();
 
-        let outcome = engine.compile(pdf_request("/main.typ")).unwrap();
+        let outcome = engine
+            .compile(pdf_request("/main.typ"), Vec::new())
+            .unwrap();
 
         assert!(
             outcome.response.ok,
@@ -89,7 +92,9 @@ mod tests {
     #[test]
     fn reports_a_missing_entry_point() {
         let engine = engine();
-        let outcome = engine.compile(pdf_request("/main.typ")).unwrap();
+        let outcome = engine
+            .compile(pdf_request("/main.typ"), Vec::new())
+            .unwrap();
 
         assert!(!outcome.response.ok);
         assert_eq!(
@@ -110,7 +115,9 @@ mod tests {
             )
             .unwrap();
 
-        let outcome = engine.compile(pdf_request("/main.typ")).unwrap();
+        let outcome = engine
+            .compile(pdf_request("/main.typ"), Vec::new())
+            .unwrap();
 
         assert!(!outcome.response.ok);
         assert!(
@@ -132,7 +139,9 @@ mod tests {
             )
             .unwrap();
 
-        let outcome = engine.compile(pdf_request("/main.typ")).unwrap();
+        let outcome = engine
+            .compile(pdf_request("/main.typ"), Vec::new())
+            .unwrap();
 
         assert!(!outcome.response.ok);
         assert!(
@@ -152,7 +161,9 @@ mod tests {
             .vfs_put("/main.typ", b"#panic(\"boom\")".to_vec())
             .unwrap();
 
-        let outcome = engine.compile(pdf_request("/main.typ")).unwrap();
+        let outcome = engine
+            .compile(pdf_request("/main.typ"), Vec::new())
+            .unwrap();
 
         assert!(!outcome.response.ok);
         let error = outcome
@@ -176,7 +187,7 @@ mod tests {
         request
             .inputs
             .insert("name".to_string(), "Pedro".to_string());
-        let outcome = engine.compile(request).unwrap();
+        let outcome = engine.compile(request, Vec::new()).unwrap();
 
         assert!(
             outcome.response.ok,
@@ -206,7 +217,7 @@ mod tests {
                 merged: false,
             },
         ];
-        let outcome = engine.compile(request).unwrap();
+        let outcome = engine.compile(request, Vec::new()).unwrap();
 
         assert!(
             outcome.response.ok,
@@ -224,5 +235,52 @@ mod tests {
         );
         assert!(outcome.blobs[0].starts_with(b"<svg"));
         assert_eq!(&outcome.blobs[2][1..4], b"PNG");
+    }
+
+    #[test]
+    fn request_files_shadow_the_vfs_and_do_not_stay() {
+        let mut engine = engine();
+        engine
+            .vfs_put("/data.typ", b"#let name = \"vfs\"".to_vec())
+            .unwrap();
+
+        let mut request = pdf_request("/main.typ");
+        request.files = vec!["/main.typ".to_string(), "/data.typ".to_string()];
+        request.outputs = vec![OutputSpec::Query {
+            selector: "metadata".to_string(),
+            field: Some("value".to_string()),
+            one: true,
+            pretty: false,
+        }];
+        let files = vec![
+            b"#import \"/data.typ\": name\n#metadata(name)".to_vec(),
+            b"#let name = \"overlay\"".to_vec(),
+        ];
+        let outcome = engine.compile(request, files).unwrap();
+
+        assert!(
+            outcome.response.ok,
+            "diagnostics: {:?}",
+            outcome.response.diagnostics
+        );
+        assert_eq!(outcome.blobs[0], b"\"overlay\"");
+
+        let again = engine
+            .compile(pdf_request("/main.typ"), Vec::new())
+            .unwrap();
+        assert_eq!(
+            again.response.missing,
+            vec![Missing::File {
+                path: "/main.typ".to_string()
+            }]
+        );
+    }
+
+    #[test]
+    fn rejects_a_file_count_mismatch() {
+        let engine = engine();
+        let mut request = pdf_request("/main.typ");
+        request.files = vec!["/main.typ".to_string()];
+        assert!(engine.compile(request, Vec::new()).is_err());
     }
 }
