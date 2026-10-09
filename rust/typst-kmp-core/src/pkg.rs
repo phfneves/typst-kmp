@@ -1,6 +1,6 @@
 //! Extraction of Typst package archives.
 //!
-//! Downloading is the Kotlin side's job — this module only turns the `.tar.gz` bytes it hands us
+//! Downloading is the Kotlin side's job — this module only turns the archive bytes it hands us
 //! into VFS entries.
 
 use std::io::Read;
@@ -11,12 +11,21 @@ use tar::Archive;
 /// Hard cap on a single extracted file, as a cheap guard against decompression bombs.
 const MAX_ENTRY_BYTES: u64 = 64 * 1024 * 1024;
 
-/// Unpacks a gzipped tarball into `(relative path, contents)` pairs.
+/// Unpacks a tarball, gzipped or plain, into `(relative path, contents)` pairs.
+///
+/// Published packages are gzipped; a plain tar is what the Kotlin side builds when it serves a
+/// package from an unpacked directory, where compressing it only to inflate it here would be
+/// wasted work. The gzip magic number tells the two apart.
 ///
 /// Paths are normalised to forward slashes without a leading `./`. Directories, symlinks and
 /// anything escaping the archive root are skipped.
 pub fn unpack(archive: &[u8]) -> Result<Vec<(String, Vec<u8>)>, String> {
-    let mut tar = Archive::new(GzDecoder::new(archive));
+    let reader: Box<dyn Read + '_> = if archive.starts_with(&[0x1f, 0x8b]) {
+        Box::new(GzDecoder::new(archive))
+    } else {
+        Box::new(archive)
+    };
+    let mut tar = Archive::new(reader);
     let entries = tar
         .entries()
         .map_err(|err| format!("malformed package archive: {err}"))?;
@@ -105,6 +114,23 @@ mod tests {
         assert_eq!(files.len(), 2);
         assert_eq!(files[0].0, "typst.toml");
         assert_eq!(files[1].1, b"#let x = 1");
+    }
+
+    #[test]
+    fn extracts_a_plain_tar() {
+        let mut builder = tar::Builder::new(Vec::new());
+        let mut header = tar::Header::new_ustar();
+        header.set_size(10);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, "src/lib.typ", &b"#let x = 1"[..])
+            .unwrap();
+        let files = unpack(&builder.into_inner().unwrap()).unwrap();
+        assert_eq!(
+            files,
+            vec![("src/lib.typ".to_string(), b"#let x = 1".to_vec())]
+        );
     }
 
     #[test]

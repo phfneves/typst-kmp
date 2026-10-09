@@ -159,8 +159,11 @@ kotlin {
 
     sourceSets {
         // JNI is shared verbatim between the JVM and Android; only the library *loader* differs.
+        // Everything except web, which has no file system: the directory package resolver.
+        val fileMain = create("fileMain") { dependsOn(commonMain.get()) }
+
         val jvmCommonMain = create("jvmCommonMain") {
-            dependsOn(commonMain.get())
+            dependsOn(fileMain)
         }
         jvmMain.get().dependsOn(jvmCommonMain)
         androidMain.get().dependsOn(jvmCommonMain)
@@ -170,6 +173,7 @@ kotlin {
         // there; only the handful of lines that touch a JavaScript value are per target.
 
         // Everything except web, which has no file system to write the inspectable PDF to.
+        nativeMain.get().dependsOn(fileMain)
         val fileTest = create("fileTest") { dependsOn(commonTest.get()) }
         jvmTest.get().dependsOn(fileTest)
         nativeTest.get().dependsOn(fileTest)
@@ -187,6 +191,9 @@ kotlin {
         webMain.dependencies {
             // Typed arrays and the DOM, which Kotlin/Wasm does not carry in its standard library.
             implementation(libs.kotlinx.browser)
+        }
+        fileMain.dependencies {
+            implementation(libs.kotlinx.io.core)
         }
         fileTest.dependencies {
             // Writing the end-to-end PDF out is shared code; only the directory is per platform.

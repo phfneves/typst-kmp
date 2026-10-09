@@ -32,6 +32,12 @@ can move text by a pixel, and pixel-compared goldens have to be regenerated with
 * `Diagnostic.rendered`: the diagnostic as the `typst` CLI prints it, with the source line and the
   span underlined. `TypstCompilationException` uses it for its message.
 * Public API dumps under `typst/api/`, checked in CI.
+* Ready-made package resolvers: `DirectoryPackageResolver` serves a local directory, packed or
+  unpacked, on every platform but the web; `RecordingPackageResolver` lists the packages a
+  compilation pulls in; `PackageResolver.orElse` chains resolvers.
+* A new artifact, `typst-kmp-universe`, with `UniversePackageResolver` to download `@preview`
+  packages over Ktor, and `InMemoryPackageCache` and `DirectoryPackageCache` to keep them.
+* A package archive may be a plain `.tar` as well as a `.tar.gz`.
 
 ### Changed
 
