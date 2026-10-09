@@ -345,14 +345,18 @@ final class io.github.phfneves.typst/TypstCompilationException : io.github.phfne
 }
 
 final class io.github.phfneves.typst/TypstConfig { // io.github.phfneves.typst/TypstConfig|null[0]
-    constructor <init>(kotlin/Boolean = ..., kotlin.collections/List<kotlin/ByteArray> = ..., io.github.phfneves.typst/FileResolver? = ..., io.github.phfneves.typst/PackageResolver? = ..., kotlin/Int = ..., kotlin/String? = ...) // io.github.phfneves.typst/TypstConfig.<init>|<init>(kotlin.Boolean;kotlin.collections.List<kotlin.ByteArray>;io.github.phfneves.typst.FileResolver?;io.github.phfneves.typst.PackageResolver?;kotlin.Int;kotlin.String?){}[0]
+    constructor <init>(kotlin/Boolean = ..., kotlin.collections/List<kotlin/ByteArray> = ..., io.github.phfneves.typst/FileResolver? = ..., io.github.phfneves.typst/PackageResolver? = ..., kotlin/Int = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ...) // io.github.phfneves.typst/TypstConfig.<init>|<init>(kotlin.Boolean;kotlin.collections.List<kotlin.ByteArray>;io.github.phfneves.typst.FileResolver?;io.github.phfneves.typst.PackageResolver?;kotlin.Int;kotlin.String?;kotlin.collections.List<kotlin.String>;kotlin.Boolean){}[0]
 
     final val embedDefaultFonts // io.github.phfneves.typst/TypstConfig.embedDefaultFonts|{}embedDefaultFonts[0]
         final fun <get-embedDefaultFonts>(): kotlin/Boolean // io.github.phfneves.typst/TypstConfig.embedDefaultFonts.<get-embedDefaultFonts>|<get-embedDefaultFonts>(){}[0]
     final val fileResolver // io.github.phfneves.typst/TypstConfig.fileResolver|{}fileResolver[0]
         final fun <get-fileResolver>(): io.github.phfneves.typst/FileResolver? // io.github.phfneves.typst/TypstConfig.fileResolver.<get-fileResolver>|<get-fileResolver>(){}[0]
+    final val fontPaths // io.github.phfneves.typst/TypstConfig.fontPaths|{}fontPaths[0]
+        final fun <get-fontPaths>(): kotlin.collections/List<kotlin/String> // io.github.phfneves.typst/TypstConfig.fontPaths.<get-fontPaths>|<get-fontPaths>(){}[0]
     final val fonts // io.github.phfneves.typst/TypstConfig.fonts|{}fonts[0]
         final fun <get-fonts>(): kotlin.collections/List<kotlin/ByteArray> // io.github.phfneves.typst/TypstConfig.fonts.<get-fonts>|<get-fonts>(){}[0]
+    final val includeSystemFonts // io.github.phfneves.typst/TypstConfig.includeSystemFonts|{}includeSystemFonts[0]
+        final fun <get-includeSystemFonts>(): kotlin/Boolean // io.github.phfneves.typst/TypstConfig.includeSystemFonts.<get-includeSystemFonts>|<get-includeSystemFonts>(){}[0]
     final val maxResolveRounds // io.github.phfneves.typst/TypstConfig.maxResolveRounds|{}maxResolveRounds[0]
         final fun <get-maxResolveRounds>(): kotlin/Int // io.github.phfneves.typst/TypstConfig.maxResolveRounds.<get-maxResolveRounds>|<get-maxResolveRounds>(){}[0]
     final val packageResolver // io.github.phfneves.typst/TypstConfig.packageResolver|{}packageResolver[0]

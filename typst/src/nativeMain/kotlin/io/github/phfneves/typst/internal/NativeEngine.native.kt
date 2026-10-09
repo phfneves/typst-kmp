@@ -1,6 +1,9 @@
 package io.github.phfneves.typst.internal
 
 import io.github.phfneves.typst.TypstNativeException
+import io.github.phfneves.typst.cinterop.typst_kmp_cancel
+import io.github.phfneves.typst.cinterop.typst_kmp_cancel_free
+import io.github.phfneves.typst.cinterop.typst_kmp_cancel_new
 import io.github.phfneves.typst.cinterop.typst_kmp_compile
 import io.github.phfneves.typst.cinterop.typst_kmp_engine_add_font
 import io.github.phfneves.typst.cinterop.typst_kmp_engine_free
@@ -105,7 +108,24 @@ internal actual class NativeEngine private constructor(configJson: String) {
     }
 
     actual suspend fun compile(requestJson: String, files: List<ByteArray>): NativeResult {
-        val result = memScoped {
+        val handle = alive()
+        val token = typst_kmp_cancel_new()
+        val result = try {
+            interruptible({ typst_kmp_cancel(token) }) {
+                compileBlocking(handle, requestJson, files, token)
+            }
+        } finally {
+            typst_kmp_cancel_free(token)
+        }
+        return collect(result)
+    }
+
+    private fun compileBlocking(
+        handle: CPointer<cnames.structs.TypstKmpEngine>,
+        requestJson: String,
+        files: List<ByteArray>,
+        token: CPointer<cnames.structs.TypstKmpCancel>?,
+    ): CPointer<cnames.structs.TypstKmpResult> = memScoped {
             val error = alloc<CPointerVar<ByteVar>>()
             val pointers = allocArray<CPointerVar<UByteVar>>(files.size)
             val lengths = allocArray<ULongVar>(files.size)
@@ -117,17 +137,20 @@ internal actual class NativeEngine private constructor(configJson: String) {
                     lengths[index] = files[index].size.convert()
                 }
                 typst_kmp_compile(
-                    alive(),
+                    handle,
                     requestJson,
                     pointers.reinterpret(),
                     lengths.reinterpret(),
                     files.size.convert(),
+                    token,
                     error.ptr,
                 ) ?: fail(error, "The native Typst engine failed to compile.")
             } finally {
                 pinned.forEach { it?.unpin() }
             }
         }
+
+    private fun collect(result: CPointer<cnames.structs.TypstKmpResult>): NativeResult {
         try {
             val json = typst_kmp_result_json(result)?.toKString()
                 ?: throw TypstNativeException("The native Typst engine returned no response.")

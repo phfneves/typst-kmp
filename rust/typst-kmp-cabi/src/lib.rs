@@ -31,13 +31,18 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
 use std::sync::RwLock;
 
-use typst_kmp_core::{CompileOutcome, TypstEngine};
+use typst_kmp_core::{CancelToken, CompileOutcome, TypstEngine};
 
 /// Opaque engine handle.
 pub struct TypstKmpEngine {
     /// Compilations only read the engine, so they share the lock and run in parallel; anything
     /// that changes fonts or the VFS takes it exclusively.
     inner: RwLock<TypstEngine>,
+}
+
+/// Opaque cancellation token: set it from any thread to stop the compilation it was passed to.
+pub struct TypstKmpCancel {
+    inner: CancelToken,
 }
 
 /// Opaque compilation result handle.
@@ -260,6 +265,7 @@ pub unsafe extern "C" fn typst_kmp_compile(
     files: *const *const u8,
     file_lens: *const usize,
     file_count: usize,
+    cancel: *const TypstKmpCancel,
     out_error: *mut *mut c_char,
 ) -> *mut TypstKmpResult {
     guard(out_error, ptr::null_mut(), || {
@@ -280,12 +286,41 @@ pub unsafe extern "C" fn typst_kmp_compile(
                 .collect()
         };
         let locked = engine.inner.read().map_err(|_| "engine lock poisoned")?;
-        let CompileOutcome { response, blobs } =
-            typst_kmp_core::compile_json(&locked, request, files)?;
+        let CompileOutcome { response, blobs } = typst_kmp_core::compile_json(
+            &locked,
+            request,
+            files,
+            cancel.as_ref().map(|c| &c.inner),
+        )?;
         let json = CString::new(typst_kmp_core::response_json(&response))
             .map_err(|_| "response JSON contained an interior NUL byte")?;
         Ok(Box::into_raw(Box::new(TypstKmpResult { json, blobs })))
     })
+}
+
+/// A new, unset cancellation token, released with [`typst_kmp_cancel_free`].
+#[no_mangle]
+pub extern "C" fn typst_kmp_cancel_new() -> *mut TypstKmpCancel {
+    Box::into_raw(Box::new(TypstKmpCancel {
+        inner: CancelToken::new(),
+    }))
+}
+
+/// Sets `cancel`. A compilation it was passed to stops at its next file, font or library access
+/// and fails with "compilation cancelled". Safe to call from any thread, and more than once.
+#[no_mangle]
+pub unsafe extern "C" fn typst_kmp_cancel(cancel: *const TypstKmpCancel) {
+    if let Some(cancel) = cancel.as_ref() {
+        cancel.inner.cancel();
+    }
+}
+
+/// Releases a token. No compilation may still be using it.
+#[no_mangle]
+pub unsafe extern "C" fn typst_kmp_cancel_free(cancel: *mut TypstKmpCancel) {
+    if !cancel.is_null() {
+        drop(Box::from_raw(cancel));
+    }
 }
 
 /// The response envelope as a NUL-terminated UTF-8 JSON string, owned by the result.

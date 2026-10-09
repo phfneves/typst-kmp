@@ -41,6 +41,29 @@ public class TypstConfig(
      * headers. A trailing slash is optional.
      */
     public val webAssetBaseUrl: String? = null,
+    /**
+     * Font files, or directories searched for them, to use besides [fonts].
+     *
+     * Unlike [fonts], these are not read up front. Creating the instance reads just enough of each
+     * file to know which faces it holds, and a face is mapped into memory from disk the first time
+     * a document uses it, so a large collection costs next to nothing until it is needed.
+     * Directories are searched recursively for `.ttf`, `.otf`, `.ttc` and `.otc` files.
+     *
+     * Creating the instance fails if a path does not exist, or names a file that is not a font.
+     * Not available in the browser, which has no file system: there, any path fails.
+     *
+     * On Android, APK assets are not files; copy them to `Context.filesDir` once and name that.
+     */
+    public val fontPaths: List<String> = emptyList(),
+    /**
+     * Whether to make the platform's installed fonts available too, loaded on first use like
+     * [fontPaths]: `/system/fonts` on Android; the `Fonts` folders of the system, the machine and
+     * the user on macOS and Windows; `/usr/share/fonts` and the user's font folders on Linux.
+     *
+     * On iOS the app sandbox may hide `/System/Library/Fonts`, in which case this finds nothing;
+     * bundle the fonts a document needs instead. In the browser it finds nothing.
+     */
+    public val includeSystemFonts: Boolean = false,
 )
 
 /**

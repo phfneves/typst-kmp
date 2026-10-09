@@ -40,7 +40,20 @@ internal object TypstNative {
      * Returns `arrayOf(responseJson: String, blobs: Array<ByteArray>)`. [files] holds the bytes of
      * the request's files, in the order its JSON lists their paths.
      */
-    external fun compile(handle: Long, requestJson: String, files: Array<ByteArray>): Array<Any>
+    external fun compile(
+        handle: Long,
+        requestJson: String,
+        files: Array<ByteArray>,
+        cancel: Long,
+    ): Array<Any>
+
+    /** A new cancellation token for [compile], released with [cancelFree]. */
+    external fun cancelNew(): Long
+
+    /** Sets a token, from any thread; the compilation holding it stops soon after. */
+    external fun cancel(token: Long)
+
+    external fun cancelFree(token: Long)
 
     external fun inspect(handle: Long): String
 
@@ -69,7 +82,15 @@ internal actual class NativeEngine private constructor(configJson: String) {
     actual suspend fun inspect(): String = TypstNative.inspect(alive())
 
     actual suspend fun compile(requestJson: String, files: List<ByteArray>): NativeResult {
-        val raw = TypstNative.compile(alive(), requestJson, files.toTypedArray())
+        val handle = alive()
+        val token = TypstNative.cancelNew()
+        val raw = try {
+            interruptible({ TypstNative.cancel(token) }) {
+                TypstNative.compile(handle, requestJson, files.toTypedArray(), token)
+            }
+        } finally {
+            TypstNative.cancelFree(token)
+        }
         val json = raw[0] as String
 
         @Suppress("UNCHECKED_CAST")

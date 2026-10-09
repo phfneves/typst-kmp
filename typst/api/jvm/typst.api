@@ -276,11 +276,13 @@ public final class io/github/phfneves/typst/TypstCompilationException : io/githu
 
 public final class io/github/phfneves/typst/TypstConfig {
 	public fun <init> ()V
-	public fun <init> (ZLjava/util/List;Lio/github/phfneves/typst/FileResolver;Lio/github/phfneves/typst/PackageResolver;ILjava/lang/String;)V
-	public synthetic fun <init> (ZLjava/util/List;Lio/github/phfneves/typst/FileResolver;Lio/github/phfneves/typst/PackageResolver;ILjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (ZLjava/util/List;Lio/github/phfneves/typst/FileResolver;Lio/github/phfneves/typst/PackageResolver;ILjava/lang/String;Ljava/util/List;Z)V
+	public synthetic fun <init> (ZLjava/util/List;Lio/github/phfneves/typst/FileResolver;Lio/github/phfneves/typst/PackageResolver;ILjava/lang/String;Ljava/util/List;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getEmbedDefaultFonts ()Z
 	public final fun getFileResolver ()Lio/github/phfneves/typst/FileResolver;
+	public final fun getFontPaths ()Ljava/util/List;
 	public final fun getFonts ()Ljava/util/List;
+	public final fun getIncludeSystemFonts ()Z
 	public final fun getMaxResolveRounds ()I
 	public final fun getPackageResolver ()Lio/github/phfneves/typst/PackageResolver;
 	public final fun getWebAssetBaseUrl ()Ljava/lang/String;

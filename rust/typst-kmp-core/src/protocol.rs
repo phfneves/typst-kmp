@@ -16,12 +16,18 @@ fn default_true() -> bool {
 pub struct EngineConfig {
     /// Whether to register the fonts bundled in the binary (requires the `embed-fonts` feature).
     pub embed_default_fonts: bool,
+    /// Font files, or directories searched for them, indexed now and loaded when first used.
+    pub font_paths: Vec<String>,
+    /// Whether to index the platform's font directories as well.
+    pub include_system_fonts: bool,
 }
 
 impl Default for EngineConfig {
     fn default() -> Self {
         Self {
             embed_default_fonts: true,
+            font_paths: Vec::new(),
+            include_system_fonts: false,
         }
     }
 }

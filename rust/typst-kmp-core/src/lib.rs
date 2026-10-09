@@ -2,8 +2,10 @@
 //!
 //! # Design
 //!
-//! This crate performs **no I/O whatsoever** — no filesystem, no network, no clock. Everything a
-//! document reads must be placed in the in-memory VFS by the host first. When the compiler asks
+//! This crate performs **no I/O** on a document's behalf — no filesystem, no network, no clock.
+//! Everything a document reads must be placed in the in-memory VFS by the host first. The one
+//! exception is fonts the host names by path, or asks for from the system directories, which are
+//! read from disk because holding them all in memory is exactly what they exist to avoid. When the compiler asks
 //! for something that is not there, the failure is reported structurally in
 //! [`protocol::CompileResponse::missing`], and the Kotlin side fetches it and retries.
 //!
@@ -21,12 +23,15 @@
 //! platform-specific binding layer (`typst-kmp-cabi`, `typst-kmp-jni`) small and identical in
 //! shape.
 
+pub mod cancel;
 pub mod engine;
+pub mod fonts;
 pub mod pkg;
 pub mod protocol;
 pub mod vfs;
 pub mod world;
 
+pub use cancel::{CancelToken, CANCELLED};
 pub use engine::{compile_json, inspect_json, response_json, CompileOutcome, TypstEngine};
 pub use protocol::{CompileRequest, CompileResponse, EngineConfig, Missing};
 
@@ -37,7 +42,7 @@ pub fn engine_from_json(config_json: &str) -> Result<TypstEngine, String> {
     } else {
         serde_json::from_str(config_json).map_err(|err| format!("invalid engine config: {err}"))?
     };
-    Ok(TypstEngine::new(config))
+    TypstEngine::new(config)
 }
 
 #[cfg(test)]
@@ -77,7 +82,7 @@ mod tests {
             .unwrap();
 
         let outcome = engine
-            .compile(pdf_request("/main.typ"), Vec::new())
+            .compile(pdf_request("/main.typ"), Vec::new(), None)
             .unwrap();
 
         assert!(
@@ -93,7 +98,7 @@ mod tests {
     fn reports_a_missing_entry_point() {
         let engine = engine();
         let outcome = engine
-            .compile(pdf_request("/main.typ"), Vec::new())
+            .compile(pdf_request("/main.typ"), Vec::new(), None)
             .unwrap();
 
         assert!(!outcome.response.ok);
@@ -116,7 +121,7 @@ mod tests {
             .unwrap();
 
         let outcome = engine
-            .compile(pdf_request("/main.typ"), Vec::new())
+            .compile(pdf_request("/main.typ"), Vec::new(), None)
             .unwrap();
 
         assert!(!outcome.response.ok);
@@ -140,7 +145,7 @@ mod tests {
             .unwrap();
 
         let outcome = engine
-            .compile(pdf_request("/main.typ"), Vec::new())
+            .compile(pdf_request("/main.typ"), Vec::new(), None)
             .unwrap();
 
         assert!(!outcome.response.ok);
@@ -162,7 +167,7 @@ mod tests {
             .unwrap();
 
         let outcome = engine
-            .compile(pdf_request("/main.typ"), Vec::new())
+            .compile(pdf_request("/main.typ"), Vec::new(), None)
             .unwrap();
 
         assert!(!outcome.response.ok);
@@ -187,7 +192,7 @@ mod tests {
         request
             .inputs
             .insert("name".to_string(), "Pedro".to_string());
-        let outcome = engine.compile(request, Vec::new()).unwrap();
+        let outcome = engine.compile(request, Vec::new(), None).unwrap();
 
         assert!(
             outcome.response.ok,
@@ -217,7 +222,7 @@ mod tests {
                 merged: false,
             },
         ];
-        let outcome = engine.compile(request, Vec::new()).unwrap();
+        let outcome = engine.compile(request, Vec::new(), None).unwrap();
 
         assert!(
             outcome.response.ok,
@@ -256,7 +261,7 @@ mod tests {
             b"#import \"/data.typ\": name\n#metadata(name)".to_vec(),
             b"#let name = \"overlay\"".to_vec(),
         ];
-        let outcome = engine.compile(request, files).unwrap();
+        let outcome = engine.compile(request, files, None).unwrap();
 
         assert!(
             outcome.response.ok,
@@ -266,7 +271,7 @@ mod tests {
         assert_eq!(outcome.blobs[0], b"\"overlay\"");
 
         let again = engine
-            .compile(pdf_request("/main.typ"), Vec::new())
+            .compile(pdf_request("/main.typ"), Vec::new(), None)
             .unwrap();
         assert_eq!(
             again.response.missing,
@@ -281,7 +286,7 @@ mod tests {
         let engine = engine();
         let mut request = pdf_request("/main.typ");
         request.files = vec!["/main.typ".to_string()];
-        assert!(engine.compile(request, Vec::new()).is_err());
+        assert!(engine.compile(request, Vec::new(), None).is_err());
     }
 
     #[test]
@@ -290,7 +295,7 @@ mod tests {
         let mut request = pdf_request("/main.typ");
         request.files = vec!["/main.typ".to_string()];
         let outcome = engine
-            .compile(request, vec![b"Hello\n#unknown-name here".to_vec()])
+            .compile(request, vec![b"Hello\n#unknown-name here".to_vec()], None)
             .unwrap();
 
         let error = &outcome.response.diagnostics[0];
@@ -332,5 +337,154 @@ mod tests {
             "fonts: {:?}",
             inspection.fonts
         );
+    }
+
+    fn heavy_document() -> &'static str {
+        "#set page(width: 12cm, height: auto)\n#for i in range(120) [= Section #i\n#lorem(60)\n]"
+    }
+
+    fn pdf_of(outcome: CompileOutcome) -> Vec<u8> {
+        assert!(outcome.response.ok, "{:?}", outcome.response.diagnostics);
+        outcome.blobs.into_iter().next().unwrap()
+    }
+
+    #[test]
+    fn a_cancelled_token_stops_the_compilation() {
+        let mut engine = engine();
+        engine.vfs_put("/main.typ", b"Hello".to_vec()).unwrap();
+        let token = CancelToken::new();
+        token.cancel();
+
+        let result = engine.compile(pdf_request("/main.typ"), Vec::new(), Some(&token));
+
+        assert_eq!(result.err().as_deref(), Some(CANCELLED));
+    }
+
+    /// The spike behind cancellation: interrupt the same compilation at many different points,
+    /// then check the engine still produces exactly what an untouched one does. A cache left
+    /// inconsistent by the unwind, or a poisoned lock, would show up as a different PDF, an
+    /// error or a panic.
+    #[test]
+    fn cancelled_compilations_leave_the_engine_intact() {
+        let mut reference = engine();
+        reference
+            .vfs_put("/main.typ", heavy_document().as_bytes().to_vec())
+            .unwrap();
+        let expected = pdf_of(
+            reference
+                .compile(pdf_request("/main.typ"), Vec::new(), None)
+                .unwrap(),
+        );
+        drop(reference);
+        typst::comemo::evict(0);
+
+        let mut engine = engine();
+        engine
+            .vfs_put("/main.typ", heavy_document().as_bytes().to_vec())
+            .unwrap();
+        let mut cancelled = 0;
+        for delay in [0u64, 1, 2, 5, 10, 20, 40, 80] {
+            let token = CancelToken::new();
+            let result = std::thread::scope(|scope| {
+                scope.spawn(|| {
+                    std::thread::sleep(std::time::Duration::from_millis(delay));
+                    token.cancel();
+                });
+                engine.compile(pdf_request("/main.typ"), Vec::new(), Some(&token))
+            });
+            match result {
+                Err(message) => {
+                    assert_eq!(message, CANCELLED);
+                    cancelled += 1;
+                }
+                Ok(outcome) => assert_eq!(pdf_of(outcome), expected),
+            }
+        }
+        assert!(cancelled > 0, "no compilation was ever interrupted");
+
+        let after = engine
+            .compile(pdf_request("/main.typ"), Vec::new(), None)
+            .unwrap();
+        assert_eq!(pdf_of(after), expected);
+    }
+
+    fn temp_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("typst-kmp-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn font_paths_are_indexed_now_and_loaded_when_used() {
+        let dir = temp_dir("fonts");
+        let nested = dir.join("nested");
+        std::fs::create_dir_all(&nested).unwrap();
+        for (index, data) in typst_assets::fonts().enumerate() {
+            std::fs::write(nested.join(format!("font-{index}.otf")), data).unwrap();
+        }
+        std::fs::write(dir.join("README.txt"), "not a font").unwrap();
+
+        let config = format!(
+            r#"{{"embedDefaultFonts": false, "fontPaths": [{:?}]}}"#,
+            dir.display().to_string()
+        );
+        let mut engine = engine_from_json(&config).unwrap();
+        let families: Vec<_> = engine.inspect().fonts.into_iter().map(|f| f.name).collect();
+        assert!(
+            families.contains(&"DejaVu Sans Mono".to_string()),
+            "{families:?}"
+        );
+        assert!(engine.fonts().slots().iter().all(|slot| !slot.is_loaded()));
+
+        engine
+            .vfs_put(
+                "/main.typ",
+                b"#set text(font: \"DejaVu Sans Mono\")\nHello".to_vec(),
+            )
+            .unwrap();
+        pdf_of(
+            engine
+                .compile(pdf_request("/main.typ"), Vec::new(), None)
+                .unwrap(),
+        );
+
+        let slots = engine.fonts().slots();
+        let loaded = slots.iter().filter(|slot| slot.is_loaded()).count();
+        assert!(
+            loaded > 0 && loaded < slots.len(),
+            "{loaded} of {}",
+            slots.len()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rejects_a_font_path_that_does_not_exist() {
+        let error = engine_from_json(r#"{"fontPaths": ["/no/such/font.ttf"]}"#)
+            .err()
+            .unwrap();
+        assert!(error.contains("/no/such/font.ttf"), "{error}");
+    }
+
+    #[test]
+    fn rejects_a_font_path_that_is_not_a_font() {
+        let dir = temp_dir("not-a-font");
+        let file = dir.join("notes.ttf");
+        std::fs::write(&file, "not a font").unwrap();
+        let config = format!(r#"{{"fontPaths": [{:?}]}}"#, file.display().to_string());
+        assert!(engine_from_json(&config).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn includes_the_system_fonts_on_request() {
+        let engine =
+            engine_from_json(r#"{"embedDefaultFonts": false, "includeSystemFonts": true}"#)
+                .unwrap();
+        // Every macOS has fonts in /System/Library/Fonts; a bare Linux container may have none.
+        if cfg!(target_os = "macos") {
+            assert!(!engine.inspect().fonts.is_empty());
+        }
     }
 }

@@ -19,6 +19,11 @@ serde.workspace = true
 serde_json.workspace = true
 flate2.workspace = true
 tar.workspace = true
+ttf-parser.workspace = true
+
+# Fonts named by path are mapped from disk, which the browser has neither of.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+memmap2.workspace = true
 
 [features]
 default = ["embed-fonts"]

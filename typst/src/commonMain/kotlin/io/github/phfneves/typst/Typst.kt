@@ -59,8 +59,12 @@ import kotlinx.coroutines.withContext
  *
  * ## Cancellation
  *
- * Cancelling the calling coroutine stops [compile] between resolution rounds, but a round already
- * running in native code finishes first: the Typst compiler has no way to be interrupted.
+ * Cancelling the calling coroutine interrupts [compile] on Android, the JVM and Kotlin/Native: the
+ * engine stops the next time the compiler reaches for a file, a font or the standard library, and
+ * [compile] throws [kotlinx.coroutines.CancellationException]. The instance stays usable.
+ *
+ * In the browser a compilation cannot be interrupted; cancelling takes effect between resolution
+ * rounds, and a round already running finishes first.
  *
  * ```kotlin
  * Typst.create().use { typst ->

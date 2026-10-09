@@ -312,9 +312,16 @@ when the last one returns; any call made after that fails with `IllegalStateExce
 
 ### Concurrency and cancellation
 
-Cancelling the coroutine that called `compile()` stops it between resolution rounds. A round
-already running in native code finishes first: the Typst compiler has no way to be interrupted, so
-a `withTimeout` stops waiting on time but the CPU work of that round still completes.
+Cancelling the coroutine that called `compile()`, directly or through `withTimeout`, interrupts
+the compilation on Android, the JVM and Kotlin/Native: the engine notices the next time the
+compiler reaches for a file, a font or the standard library, which a running document does
+constantly, and `compile()` throws `CancellationException`. The instance is unharmed and the next
+compilation runs as usual; Typst keeps only the results of work that finished, so an interrupted
+one leaves nothing half-done in its caches.
+
+In the browser a compilation cannot be interrupted, because WebAssembly cannot unwind out of the
+compiler. Cancelling there takes effect between resolution rounds, and a round already running
+finishes first.
 
 ### What stays in the virtual file system
 
@@ -368,8 +375,32 @@ Fonts are part of the app, so they ship with it:
   use `Res.readBytes("files/fonts/Inter.ttf")` on every platform instead.
 * **JVM:** read them from the classpath with `javaClass.getResourceAsStream(...)`.
 
-Every face stays in memory for the lifetime of the instance, which is one more reason to keep a
-single shared instance.
+Every face passed as bytes stays in memory for the lifetime of the instance, which is one more
+reason to keep a single shared instance.
+
+### Fonts on disk
+
+Where there is a file system, fonts can stay on disk until a document uses them:
+
+```kotlin
+TypstConfig(
+    fontPaths = listOf("/opt/app/fonts", "/opt/app/Brand.otf"),
+    includeSystemFonts = true,
+)
+```
+
+Creating the instance reads only enough of each file to know its faces; a face is mapped into
+memory the first time a document uses it, and the operating system pages it in and out from there.
+A directory is searched recursively for `.ttf`, `.otf`, `.ttc` and `.otc` files, and a path that
+does not exist fails `Typst.create()`.
+
+`includeSystemFonts` adds the platform's installed fonts the same way: `/system/fonts` on Android,
+the `Fonts` folders on macOS and Windows, `/usr/share/fonts` and the user's font folders on Linux.
+It is off by default because it makes the output depend on the machine. On iOS the sandbox may hide
+the system fonts, and in the browser there are none; there, ship the fonts as bytes.
+
+On Android, assets are not files. To keep a large set out of memory, copy them from the APK to
+`context.filesDir` once and pass that directory in `fontPaths`.
 
 ## Outputs
 

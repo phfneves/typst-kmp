@@ -31,7 +31,11 @@ private val json = Json {
 // --- outbound ---------------------------------------------------------------------------------
 
 @Serializable
-internal class WireEngineConfig(val embedDefaultFonts: Boolean)
+internal class WireEngineConfig(
+    val embedDefaultFonts: Boolean,
+    val fontPaths: List<String>,
+    val includeSystemFonts: Boolean,
+)
 
 @Serializable
 internal class WireRequest(
@@ -157,7 +161,9 @@ internal class WireFontFamily(val name: String, val faces: Int)
 // --- conversions ------------------------------------------------------------------------------
 
 internal fun encodeConfig(config: TypstConfig): String =
-    json.encodeToString(WireEngineConfig(config.embedDefaultFonts))
+    json.encodeToString(
+        WireEngineConfig(config.embedDefaultFonts, config.fontPaths, config.includeSystemFonts),
+    )
 
 internal fun encodeRequest(request: CompileRequest, files: List<String>): String = json.encodeToString(
     WireRequest(

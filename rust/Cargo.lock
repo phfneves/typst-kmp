@@ -2616,9 +2616,11 @@ name = "typst-kmp-core"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "memmap2",
  "serde",
  "serde_json",
  "tar",
+ "ttf-parser",
  "typst",
  "typst-assets",
  "typst-eval",
