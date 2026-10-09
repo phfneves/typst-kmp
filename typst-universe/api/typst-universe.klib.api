@@ -1,0 +1,43 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, iosX64, js, linuxArm64, linuxX64, macosArm64, macosX64, mingwX64, wasmJs]
+// Alias: native => [iosArm64, iosSimulatorArm64, iosX64, linuxArm64, linuxX64, macosArm64, macosX64, mingwX64]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <io.github.phfneves:typst-universe>
+abstract interface io.github.phfneves.typst.universe/PackageCache { // io.github.phfneves.typst.universe/PackageCache|null[0]
+    abstract suspend fun get(io.github.phfneves.typst/PackageSpec): kotlin/ByteArray? // io.github.phfneves.typst.universe/PackageCache.get|get(io.github.phfneves.typst.PackageSpec){}[0]
+    abstract suspend fun put(io.github.phfneves.typst/PackageSpec, kotlin/ByteArray) // io.github.phfneves.typst.universe/PackageCache.put|put(io.github.phfneves.typst.PackageSpec;kotlin.ByteArray){}[0]
+}
+
+final class io.github.phfneves.typst.universe/InMemoryPackageCache : io.github.phfneves.typst.universe/PackageCache { // io.github.phfneves.typst.universe/InMemoryPackageCache|null[0]
+    constructor <init>() // io.github.phfneves.typst.universe/InMemoryPackageCache.<init>|<init>(){}[0]
+
+    final suspend fun get(io.github.phfneves.typst/PackageSpec): kotlin/ByteArray? // io.github.phfneves.typst.universe/InMemoryPackageCache.get|get(io.github.phfneves.typst.PackageSpec){}[0]
+    final suspend fun put(io.github.phfneves.typst/PackageSpec, kotlin/ByteArray) // io.github.phfneves.typst.universe/InMemoryPackageCache.put|put(io.github.phfneves.typst.PackageSpec;kotlin.ByteArray){}[0]
+}
+
+final class io.github.phfneves.typst.universe/UniverseException : io.github.phfneves.typst/TypstException { // io.github.phfneves.typst.universe/UniverseException|null[0]
+    constructor <init>(kotlin/String, kotlin/Throwable? = ...) // io.github.phfneves.typst.universe/UniverseException.<init>|<init>(kotlin.String;kotlin.Throwable?){}[0]
+}
+
+final class io.github.phfneves.typst.universe/UniversePackageResolver : io.github.phfneves.typst/PackageResolver { // io.github.phfneves.typst.universe/UniversePackageResolver|null[0]
+    constructor <init>(io.ktor.client/HttpClient, io.github.phfneves.typst.universe/PackageCache = ..., kotlin/String = ...) // io.github.phfneves.typst.universe/UniversePackageResolver.<init>|<init>(io.ktor.client.HttpClient;io.github.phfneves.typst.universe.PackageCache;kotlin.String){}[0]
+
+    final suspend fun resolve(io.github.phfneves.typst/PackageSpec): kotlin/ByteArray? // io.github.phfneves.typst.universe/UniversePackageResolver.resolve|resolve(io.github.phfneves.typst.PackageSpec){}[0]
+
+    final object Companion { // io.github.phfneves.typst.universe/UniversePackageResolver.Companion|null[0]
+        final const val DEFAULT_BASE_URL // io.github.phfneves.typst.universe/UniversePackageResolver.Companion.DEFAULT_BASE_URL|{}DEFAULT_BASE_URL[0]
+            final fun <get-DEFAULT_BASE_URL>(): kotlin/String // io.github.phfneves.typst.universe/UniversePackageResolver.Companion.DEFAULT_BASE_URL.<get-DEFAULT_BASE_URL>|<get-DEFAULT_BASE_URL>(){}[0]
+    }
+}
+
+// Targets: [native]
+final class io.github.phfneves.typst.universe/DirectoryPackageCache : io.github.phfneves.typst.universe/PackageCache { // io.github.phfneves.typst.universe/DirectoryPackageCache|null[0]
+    constructor <init>(kotlin/String) // io.github.phfneves.typst.universe/DirectoryPackageCache.<init>|<init>(kotlin.String){}[0]
+
+    final suspend fun get(io.github.phfneves.typst/PackageSpec): kotlin/ByteArray? // io.github.phfneves.typst.universe/DirectoryPackageCache.get|get(io.github.phfneves.typst.PackageSpec){}[0]
+    final suspend fun put(io.github.phfneves.typst/PackageSpec, kotlin/ByteArray) // io.github.phfneves.typst.universe/DirectoryPackageCache.put|put(io.github.phfneves.typst.PackageSpec;kotlin.ByteArray){}[0]
+}

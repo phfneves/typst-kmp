@@ -255,8 +255,44 @@ Supply the resolvers through `TypstConfig`, or per request through `CompileReque
 ```kotlin
 val config = TypstConfig(
     fileResolver = FileResolver { path -> readFromDisk(path) },
-    packageResolver = { spec -> httpClient.get("https://packages.typst.org/…").body() },
+    packageResolver = DirectoryPackageResolver("/srv/typst/packages")
+        .orElse(UniversePackageResolver(httpClient, DirectoryPackageCache("/var/cache/typst"))),
 )
+```
+
+### Package resolvers
+
+A package resolver returns the archive of a package, `.tar.gz` as published or a plain `.tar`.
+Three come ready-made:
+
+| Resolver | Where | What it does |
+| --- | --- | --- |
+| `DirectoryPackageResolver(root)` | `typst-kmp`, every platform but the web | reads `<root>/<namespace>/<name>-<version>.tar.gz`, or the unpacked `<root>/<namespace>/<name>/<version>/` that the `typst` CLI keeps |
+| `RecordingPackageResolver(delegate)` | `typst-kmp` | passes requests on and lists what was asked for in `requested`, and what the delegate lacked in `unresolved` |
+| `UniversePackageResolver(httpClient, cache)` | `typst-kmp-universe` | downloads `@preview` packages from Typst Universe, through an `InMemoryPackageCache` or a `DirectoryPackageCache` |
+
+`orElse` chains them, first answer wins. Ktor lives in its own artifact so an application that
+vendors its packages does not carry an HTTP client:
+
+```kotlin
+commonMain.dependencies {
+    implementation("io.github.phfneves:typst-kmp-universe:0.1.0-alpha03")
+}
+```
+
+Bring the Ktor engine of each platform yourself (`ktor-client-okhttp`, `-darwin`, `-js`, …).
+
+To make a template compile offline, compile it once through a recorder and a directory cache,
+then ship the directory and point a `DirectoryPackageResolver` at it. A `DirectoryPackageCache`
+writes the layout that resolver reads, and the recorder confirms nothing slipped through:
+
+```kotlin
+val recorder = RecordingPackageResolver(
+    UniversePackageResolver(httpClient, DirectoryPackageCache("src/main/resources/typst-packages")),
+)
+Typst.create(TypstConfig(packageResolver = recorder)).use { it.compilePdf(request) }
+check(recorder.unresolved.isEmpty()) { "missing: ${recorder.unresolved}" }
+println(recorder.requested) // every package the template pulls in, transitively
 ```
 
 ### Sharing an instance
@@ -557,6 +593,7 @@ the GPG key that signs the artifacts.
 | `rust/typst-kmp-jni` | JNI facade for the JVM and Android |
 | `rust/typst-kmp-wasm` | wasm-bindgen facade for the browser, plus the worker script that drives it |
 | `typst` | the published Kotlin Multiplatform library |
+| `typst-universe` | `typst-kmp-universe`: the Ktor-based Typst Universe resolver and its caches |
 | `typst-android-native` | an AAR that carries nothing but `jniLibs/*.so` — see below |
 | `build-logic` | the Gradle ↔ cargo integration |
 | `demo` | a Compose Multiplatform app built on the library — a build of its own, see [demo/README.md](demo/README.md) |

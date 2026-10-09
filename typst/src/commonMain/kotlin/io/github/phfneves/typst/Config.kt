@@ -53,7 +53,13 @@ public fun interface FileResolver {
     public suspend fun resolve(path: String): ByteArray?
 }
 
-/** Supplies the `.tar.gz` archive of a Typst package. */
+/**
+ * Supplies the archive of a Typst package: a `.tar.gz`, as published, or a plain `.tar`.
+ *
+ * Ready-made ones: `DirectoryPackageResolver` reads a local directory (everywhere but the web),
+ * [RecordingPackageResolver] records what a compilation imports, and the `typst-kmp-universe`
+ * artifact downloads from Typst Universe. [orElse] chains them.
+ */
 public fun interface PackageResolver {
     public suspend fun resolve(spec: PackageSpec): ByteArray?
 }
