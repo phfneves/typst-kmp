@@ -90,6 +90,11 @@ kotlin {
     explicitApi()
     jvmToolchain(21)
 
+    // Guards the public API, klibs included: the dump under `api/` is the contract, and a change
+    // to it has to be committed on purpose.
+    @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
+    abiValidation()
+
     compilerOptions {
         // `NativeEngine` is an expect/actual class, which is still flagged as Beta.
         freeCompilerArgs.add("-Xexpect-actual-classes")

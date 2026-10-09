@@ -52,8 +52,19 @@ internal actual class NativeEngine private constructor(private val worker: Worke
 
     actual suspend fun vfsClearPackages(): Int = call("vfsClearPackages").count
 
-    actual suspend fun compile(requestJson: String): NativeResult {
-        val reply = call("compile", text = requestJson)
+    actual suspend fun inspect(): String = call("inspect").json
+
+    actual suspend fun compile(requestJson: String, files: List<ByteArray>): NativeResult {
+        // One buffer and a length table cross to the worker instead of an array of arrays; the
+        // engine splits them again on the other side.
+        val joined = ByteArray(files.sumOf { it.size })
+        var offset = 0
+        for (file in files) {
+            file.copyInto(joined, offset)
+            offset += file.size
+        }
+        val lengths = IntArray(files.size) { files[it].size }
+        val reply = call("compile", text = requestJson, bytes = joined, lengths = lengths)
         return NativeResult(reply.json, reply.blobs)
     }
 
@@ -76,6 +87,7 @@ internal actual class NativeEngine private constructor(private val worker: Worke
         operation: String,
         text: String? = null,
         bytes: ByteArray? = null,
+        lengths: IntArray? = null,
     ): WorkerReply {
         if (closed) throw TypstNativeException("The Typst engine is already closed.")
         fatal?.let { throw TypstNativeException(it) }
@@ -83,7 +95,7 @@ internal actual class NativeEngine private constructor(private val worker: Worke
         val id = nextId++
         return suspendCoroutine { continuation ->
             pending[id] = continuation
-            worker.post(id, operation, text, bytes)
+            worker.post(id, operation, text, bytes, lengths)
         }
     }
 
@@ -187,7 +199,7 @@ internal expect class WorkerHandle {
 
     fun postInit(id: Int, configJson: String, glueUrl: String, wasmUrl: String)
 
-    fun post(id: Int, operation: String, text: String?, bytes: ByteArray?)
+    fun post(id: Int, operation: String, text: String?, bytes: ByteArray?, lengths: IntArray?)
 
     fun onMessage(handler: (WorkerReply) -> Unit)
 

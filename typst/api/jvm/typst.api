@@ -1,0 +1,343 @@
+public final class io/github/phfneves/typst/CompileRequest {
+	public static final field Companion Lio/github/phfneves/typst/CompileRequest$Companion;
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Lio/github/phfneves/typst/TypstDate;Lio/github/phfneves/typst/FileResolver;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Lio/github/phfneves/typst/TypstDate;Lio/github/phfneves/typst/FileResolver;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getFileResolver ()Lio/github/phfneves/typst/FileResolver;
+	public final fun getFiles ()Ljava/util/Map;
+	public final fun getInputs ()Ljava/util/Map;
+	public final fun getMain ()Ljava/lang/String;
+	public final fun getNow ()Lio/github/phfneves/typst/TypstDate;
+	public final fun getOutputs ()Ljava/util/List;
+}
+
+public final class io/github/phfneves/typst/CompileRequest$Companion {
+	public final fun of (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Lio/github/phfneves/typst/TypstDate;)Lio/github/phfneves/typst/CompileRequest;
+	public static synthetic fun of$default (Lio/github/phfneves/typst/CompileRequest$Companion;Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Lio/github/phfneves/typst/TypstDate;ILjava/lang/Object;)Lio/github/phfneves/typst/CompileRequest;
+}
+
+public abstract interface class io/github/phfneves/typst/CompileResult {
+	public fun getOrThrow ()Ljava/util/List;
+	public abstract fun getWarnings ()Ljava/util/List;
+}
+
+public final class io/github/phfneves/typst/CompileResult$DefaultImpls {
+	public static fun getOrThrow (Lio/github/phfneves/typst/CompileResult;)Ljava/util/List;
+}
+
+public final class io/github/phfneves/typst/CompileResult$Failure : io/github/phfneves/typst/CompileResult {
+	public fun <init> (Ljava/util/List;Ljava/util/List;Ljava/util/List;)V
+	public final fun getErrors ()Ljava/util/List;
+	public fun getOrThrow ()Ljava/util/List;
+	public final fun getUnresolved ()Ljava/util/List;
+	public fun getWarnings ()Ljava/util/List;
+}
+
+public final class io/github/phfneves/typst/CompileResult$Success : io/github/phfneves/typst/CompileResult {
+	public fun <init> (Ljava/util/List;Ljava/util/List;)V
+	public fun getOrThrow ()Ljava/util/List;
+	public final fun getOutputs ()Ljava/util/List;
+	public fun getWarnings ()Ljava/util/List;
+}
+
+public final class io/github/phfneves/typst/ConfigKt {
+	public static final fun FileResolver (Ljava/util/Map;)Lio/github/phfneves/typst/FileResolver;
+}
+
+public final class io/github/phfneves/typst/Diagnostic {
+	public fun <init> (Lio/github/phfneves/typst/Severity;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/util/List;Ljava/util/List;Ljava/lang/String;)V
+	public synthetic fun <init> (Lio/github/phfneves/typst/Severity;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/util/List;Ljava/util/List;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lio/github/phfneves/typst/Severity;
+	public final fun component10 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/Integer;
+	public final fun component5 ()Ljava/lang/Integer;
+	public final fun component6 ()Ljava/lang/Integer;
+	public final fun component7 ()Ljava/lang/Integer;
+	public final fun component8 ()Ljava/util/List;
+	public final fun component9 ()Ljava/util/List;
+	public final fun copy (Lio/github/phfneves/typst/Severity;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/util/List;Ljava/util/List;Ljava/lang/String;)Lio/github/phfneves/typst/Diagnostic;
+	public static synthetic fun copy$default (Lio/github/phfneves/typst/Diagnostic;Lio/github/phfneves/typst/Severity;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/util/List;Ljava/util/List;Ljava/lang/String;ILjava/lang/Object;)Lio/github/phfneves/typst/Diagnostic;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getColumn ()Ljava/lang/Integer;
+	public final fun getEnd ()Ljava/lang/Integer;
+	public final fun getHints ()Ljava/util/List;
+	public final fun getLine ()Ljava/lang/Integer;
+	public final fun getMessage ()Ljava/lang/String;
+	public final fun getPath ()Ljava/lang/String;
+	public final fun getRendered ()Ljava/lang/String;
+	public final fun getSeverity ()Lio/github/phfneves/typst/Severity;
+	public final fun getStart ()Ljava/lang/Integer;
+	public final fun getTrace ()Ljava/util/List;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class io/github/phfneves/typst/FileResolver {
+	public abstract fun resolve (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class io/github/phfneves/typst/ModelKt {
+	public static final fun getPdf (Lio/github/phfneves/typst/CompileResult$Success;)[B
+	public static final fun getPdfBytes (Lio/github/phfneves/typst/CompileResult;)[B
+}
+
+public abstract interface class io/github/phfneves/typst/Output {
+}
+
+public final class io/github/phfneves/typst/Output$Pdf : io/github/phfneves/typst/Output {
+	public fun <init> ([B)V
+	public final fun getBytes ()[B
+}
+
+public final class io/github/phfneves/typst/Output$Png : io/github/phfneves/typst/Output {
+	public fun <init> (Ljava/util/List;)V
+	public final fun getPages ()Ljava/util/List;
+}
+
+public final class io/github/phfneves/typst/Output$Query : io/github/phfneves/typst/Output {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun getJson ()Ljava/lang/String;
+}
+
+public final class io/github/phfneves/typst/Output$Svg : io/github/phfneves/typst/Output {
+	public fun <init> (Ljava/util/List;)V
+	public final fun getPages ()Ljava/util/List;
+}
+
+public abstract interface class io/github/phfneves/typst/OutputFormat {
+}
+
+public final class io/github/phfneves/typst/OutputFormat$Pdf : io/github/phfneves/typst/OutputFormat {
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Z)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/util/List;
+	public final fun component4 ()Z
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Z)Lio/github/phfneves/typst/OutputFormat$Pdf;
+	public static synthetic fun copy$default (Lio/github/phfneves/typst/OutputFormat$Pdf;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ZILjava/lang/Object;)Lio/github/phfneves/typst/OutputFormat$Pdf;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCreator ()Ljava/lang/String;
+	public final fun getIdent ()Ljava/lang/String;
+	public final fun getPretty ()Z
+	public final fun getStandards ()Ljava/util/List;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/phfneves/typst/OutputFormat$Png : io/github/phfneves/typst/OutputFormat {
+	public fun <init> ()V
+	public fun <init> (FZ)V
+	public synthetic fun <init> (FZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()F
+	public final fun component2 ()Z
+	public final fun copy (FZ)Lio/github/phfneves/typst/OutputFormat$Png;
+	public static synthetic fun copy$default (Lio/github/phfneves/typst/OutputFormat$Png;FZILjava/lang/Object;)Lio/github/phfneves/typst/OutputFormat$Png;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMerged ()Z
+	public final fun getPixelPerPt ()F
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/phfneves/typst/OutputFormat$Query : io/github/phfneves/typst/OutputFormat {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;ZZ)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;ZZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Z
+	public final fun component4 ()Z
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;ZZ)Lio/github/phfneves/typst/OutputFormat$Query;
+	public static synthetic fun copy$default (Lio/github/phfneves/typst/OutputFormat$Query;Ljava/lang/String;Ljava/lang/String;ZZILjava/lang/Object;)Lio/github/phfneves/typst/OutputFormat$Query;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getField ()Ljava/lang/String;
+	public final fun getOne ()Z
+	public final fun getPretty ()Z
+	public final fun getSelector ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/phfneves/typst/OutputFormat$Svg : io/github/phfneves/typst/OutputFormat {
+	public fun <init> ()V
+	public fun <init> (ZZ)V
+	public synthetic fun <init> (ZZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Z
+	public final fun component2 ()Z
+	public final fun copy (ZZ)Lio/github/phfneves/typst/OutputFormat$Svg;
+	public static synthetic fun copy$default (Lio/github/phfneves/typst/OutputFormat$Svg;ZZILjava/lang/Object;)Lio/github/phfneves/typst/OutputFormat$Svg;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMerged ()Z
+	public final fun getPretty ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class io/github/phfneves/typst/PackageResolver {
+	public abstract fun resolve (Lio/github/phfneves/typst/PackageSpec;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class io/github/phfneves/typst/PackageSpec {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lio/github/phfneves/typst/PackageSpec;
+	public static synthetic fun copy$default (Lio/github/phfneves/typst/PackageSpec;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lio/github/phfneves/typst/PackageSpec;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getName ()Ljava/lang/String;
+	public final fun getNamespace ()Ljava/lang/String;
+	public final fun getVersion ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/phfneves/typst/PdfStandard : java/lang/Enum {
+	public static final field A_2B Lio/github/phfneves/typst/PdfStandard;
+	public static final field A_3B Lio/github/phfneves/typst/PdfStandard;
+	public static final field V1_4 Lio/github/phfneves/typst/PdfStandard;
+	public static final field V1_5 Lio/github/phfneves/typst/PdfStandard;
+	public static final field V1_6 Lio/github/phfneves/typst/PdfStandard;
+	public static final field V1_7 Lio/github/phfneves/typst/PdfStandard;
+	public static final field V2_0 Lio/github/phfneves/typst/PdfStandard;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/phfneves/typst/PdfStandard;
+	public static fun values ()[Lio/github/phfneves/typst/PdfStandard;
+}
+
+public final class io/github/phfneves/typst/Severity : java/lang/Enum {
+	public static final field ERROR Lio/github/phfneves/typst/Severity;
+	public static final field WARNING Lio/github/phfneves/typst/Severity;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/phfneves/typst/Severity;
+	public static fun values ()[Lio/github/phfneves/typst/Severity;
+}
+
+public final class io/github/phfneves/typst/TracePoint {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/Integer;
+	public final fun component4 ()Ljava/lang/Integer;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;)Lio/github/phfneves/typst/TracePoint;
+	public static synthetic fun copy$default (Lio/github/phfneves/typst/TracePoint;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;ILjava/lang/Object;)Lio/github/phfneves/typst/TracePoint;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getColumn ()Ljava/lang/Integer;
+	public final fun getLine ()Ljava/lang/Integer;
+	public final fun getMessage ()Ljava/lang/String;
+	public final fun getPath ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/phfneves/typst/Typst : java/lang/AutoCloseable {
+	public static final field Companion Lio/github/phfneves/typst/Typst$Companion;
+	public final fun addFont ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun clearFiles (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun clearPackages (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun close ()V
+	public final fun compile (Lio/github/phfneves/typst/CompileRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun compilePdf (Lio/github/phfneves/typst/CompileRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun fontFamilies (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun listFiles (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun listPackages (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun removeFile (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class io/github/phfneves/typst/Typst$Companion {
+	public final fun create (Lio/github/phfneves/typst/TypstConfig;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun create$default (Lio/github/phfneves/typst/Typst$Companion;Lio/github/phfneves/typst/TypstConfig;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class io/github/phfneves/typst/TypstCompilationException : io/github/phfneves/typst/TypstException {
+	public fun <init> (Ljava/util/List;Ljava/util/List;)V
+	public final fun getErrors ()Ljava/util/List;
+	public final fun getUnresolved ()Ljava/util/List;
+}
+
+public final class io/github/phfneves/typst/TypstConfig {
+	public fun <init> ()V
+	public fun <init> (ZLjava/util/List;Lio/github/phfneves/typst/FileResolver;Lio/github/phfneves/typst/PackageResolver;ILjava/lang/String;)V
+	public synthetic fun <init> (ZLjava/util/List;Lio/github/phfneves/typst/FileResolver;Lio/github/phfneves/typst/PackageResolver;ILjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getEmbedDefaultFonts ()Z
+	public final fun getFileResolver ()Lio/github/phfneves/typst/FileResolver;
+	public final fun getFonts ()Ljava/util/List;
+	public final fun getMaxResolveRounds ()I
+	public final fun getPackageResolver ()Lio/github/phfneves/typst/PackageResolver;
+	public final fun getWebAssetBaseUrl ()Ljava/lang/String;
+}
+
+public final class io/github/phfneves/typst/TypstDate {
+	public fun <init> (IIIIIII)V
+	public synthetic fun <init> (IIIIIIIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()I
+	public final fun component2 ()I
+	public final fun component3 ()I
+	public final fun component4 ()I
+	public final fun component5 ()I
+	public final fun component6 ()I
+	public final fun component7 ()I
+	public final fun copy (IIIIIII)Lio/github/phfneves/typst/TypstDate;
+	public static synthetic fun copy$default (Lio/github/phfneves/typst/TypstDate;IIIIIIIILjava/lang/Object;)Lio/github/phfneves/typst/TypstDate;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDay ()I
+	public final fun getHour ()I
+	public final fun getMinute ()I
+	public final fun getMonth ()I
+	public final fun getOffsetMinutes ()I
+	public final fun getSecond ()I
+	public final fun getYear ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public class io/github/phfneves/typst/TypstException : java/lang/RuntimeException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class io/github/phfneves/typst/TypstNativeException : io/github/phfneves/typst/TypstException {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public abstract interface class io/github/phfneves/typst/Unresolved {
+}
+
+public final class io/github/phfneves/typst/Unresolved$File : io/github/phfneves/typst/Unresolved {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lio/github/phfneves/typst/Unresolved$File;
+	public static synthetic fun copy$default (Lio/github/phfneves/typst/Unresolved$File;Ljava/lang/String;ILjava/lang/Object;)Lio/github/phfneves/typst/Unresolved$File;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getPath ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/phfneves/typst/Unresolved$Package : io/github/phfneves/typst/Unresolved {
+	public fun <init> (Lio/github/phfneves/typst/PackageSpec;)V
+	public final fun component1 ()Lio/github/phfneves/typst/PackageSpec;
+	public final fun copy (Lio/github/phfneves/typst/PackageSpec;)Lio/github/phfneves/typst/Unresolved$Package;
+	public static synthetic fun copy$default (Lio/github/phfneves/typst/Unresolved$Package;Lio/github/phfneves/typst/PackageSpec;ILjava/lang/Object;)Lio/github/phfneves/typst/Unresolved$Package;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getSpec ()Lio/github/phfneves/typst/PackageSpec;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/phfneves/typst/VfsEntry {
+	public fun <init> (Ljava/lang/String;J)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()J
+	public final fun copy (Ljava/lang/String;J)Lio/github/phfneves/typst/VfsEntry;
+	public static synthetic fun copy$default (Lio/github/phfneves/typst/VfsEntry;Ljava/lang/String;JILjava/lang/Object;)Lio/github/phfneves/typst/VfsEntry;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getPath ()Ljava/lang/String;
+	public final fun getSize ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+

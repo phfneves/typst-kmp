@@ -110,14 +110,40 @@ impl TypstKmpEngine {
         Ok(engine.vfs_clear_packages() as u32)
     }
 
+    /// What the engine holds, as JSON.
+    pub fn inspect(&self) -> Result<String, JsError> {
+        let engine = self.inner.try_borrow().map_err(error_reentrant)?;
+        Ok(typst_kmp_core::inspect_json(&engine))
+    }
+
     /// Compiles a request.
+    ///
+    /// The bytes of the request's `files` arrive concatenated in `files`, in the order the JSON
+    /// lists their paths, with `file_lens` giving each one's length: two flat buffers cross the
+    /// boundary in one copy each, where an array of arrays would need a binding per element.
     ///
     /// Throws only on a hard failure; a failed *compilation* still yields a result whose JSON
     /// carries the diagnostics.
-    pub fn compile(&self, request_json: &str) -> Result<TypstKmpResult, JsError> {
+    pub fn compile(
+        &self,
+        request_json: &str,
+        files: &[u8],
+        file_lens: &[u32],
+    ) -> Result<TypstKmpResult, JsError> {
+        let mut split = Vec::with_capacity(file_lens.len());
+        let mut rest = files;
+        for &len in file_lens {
+            let len = len as usize;
+            if len > rest.len() {
+                return Err(error("file lengths exceed the supplied bytes"));
+            }
+            let (head, tail) = rest.split_at(len);
+            split.push(head.to_vec());
+            rest = tail;
+        }
         let engine = self.inner.try_borrow().map_err(error_reentrant)?;
         let CompileOutcome { response, blobs } =
-            typst_kmp_core::compile_json(&engine, request_json).map_err(error)?;
+            typst_kmp_core::compile_json(&engine, request_json, split).map_err(error)?;
         Ok(TypstKmpResult {
             json: typst_kmp_core::response_json(&response),
             blobs,

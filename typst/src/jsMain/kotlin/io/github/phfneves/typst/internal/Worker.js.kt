@@ -25,12 +25,20 @@ internal actual class WorkerHandle(private val worker: Worker) {
         worker.postMessage(message)
     }
 
-    actual fun post(id: Int, operation: String, text: String?, bytes: ByteArray?) {
+    actual fun post(
+        id: Int,
+        operation: String,
+        text: String?,
+        bytes: ByteArray?,
+        lengths: IntArray?,
+    ) {
         val message = js("{}")
         message.id = id
         message.op = operation
         if (text != null) message.text = text
         if (bytes != null) message.bytes = bytes.asTypedArray()
+        // An IntArray is an Int32Array here; the worker reads it into a Uint32Array.
+        if (lengths != null) message.lengths = lengths
         worker.postMessage(message)
     }
 

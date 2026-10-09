@@ -36,6 +36,8 @@ internal class WireEngineConfig(val embedDefaultFonts: Boolean)
 @Serializable
 internal class WireRequest(
     val main: String,
+    /** Paths of the request's own files; their bytes travel alongside, in this order. */
+    val files: List<String>,
     val inputs: Map<String, String>,
     val outputs: List<WireOutputSpec>,
     val now: WireDate? = null,
@@ -110,6 +112,7 @@ internal class WireDiagnostic(
     val column: Int? = null,
     val hints: List<String> = emptyList(),
     val trace: List<WireTracePoint> = emptyList(),
+    val rendered: String = "",
 )
 
 @Serializable
@@ -138,14 +141,28 @@ internal sealed class WireMissing {
     ) : WireMissing()
 }
 
+@Serializable
+internal class WireInspection(
+    val files: List<WireFileEntry> = emptyList(),
+    val packages: List<String> = emptyList(),
+    val fonts: List<WireFontFamily> = emptyList(),
+)
+
+@Serializable
+internal class WireFileEntry(val path: String, val size: Long)
+
+@Serializable
+internal class WireFontFamily(val name: String, val faces: Int)
+
 // --- conversions ------------------------------------------------------------------------------
 
 internal fun encodeConfig(config: TypstConfig): String =
     json.encodeToString(WireEngineConfig(config.embedDefaultFonts))
 
-internal fun encodeRequest(request: CompileRequest): String = json.encodeToString(
+internal fun encodeRequest(request: CompileRequest, files: List<String>): String = json.encodeToString(
     WireRequest(
         main = request.main,
+        files = files,
         inputs = request.inputs,
         outputs = request.outputs.map { it.toWire() },
         now = request.now?.let {
@@ -153,6 +170,12 @@ internal fun encodeRequest(request: CompileRequest): String = json.encodeToStrin
         },
     ),
 )
+
+internal fun decodeInspection(text: String): WireInspection = try {
+    json.decodeFromString<WireInspection>(text)
+} catch (error: SerializationException) {
+    throw TypstException("Native layer returned a malformed inspection: $text", error)
+}
 
 internal fun decodeResponse(text: String): WireCompileResponse = try {
     json.decodeFromString<WireCompileResponse>(text)
@@ -177,4 +200,5 @@ internal fun WireDiagnostic.toDiagnostic(): Diagnostic = Diagnostic(
     column = column,
     hints = hints,
     trace = trace.map { TracePoint(it.message, it.path, it.line, it.column) },
+    rendered = rendered,
 )

@@ -4,6 +4,7 @@ import io.github.phfneves.typst.TypstNativeException
 import io.github.phfneves.typst.cinterop.typst_kmp_compile
 import io.github.phfneves.typst.cinterop.typst_kmp_engine_add_font
 import io.github.phfneves.typst.cinterop.typst_kmp_engine_free
+import io.github.phfneves.typst.cinterop.typst_kmp_engine_inspect
 import io.github.phfneves.typst.cinterop.typst_kmp_engine_new
 import io.github.phfneves.typst.cinterop.typst_kmp_engine_vfs_clear_files
 import io.github.phfneves.typst.cinterop.typst_kmp_engine_vfs_clear_packages
@@ -23,6 +24,10 @@ import kotlinx.cinterop.ULongVar
 import kotlinx.cinterop.UByteVar
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
+import kotlinx.cinterop.allocArray
+import kotlinx.cinterop.get
+import kotlinx.cinterop.pin
+import kotlinx.cinterop.set
 import kotlinx.cinterop.convert
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
@@ -88,11 +93,40 @@ internal actual class NativeEngine private constructor(configJson: String) {
         count
     }
 
-    actual suspend fun compile(requestJson: String): NativeResult {
+    actual suspend fun inspect(): String = memScoped {
+        val error = alloc<CPointerVar<ByteVar>>()
+        val pointer = typst_kmp_engine_inspect(alive(), error.ptr)
+            ?: fail(error, "Failed to inspect the native Typst engine.")
+        try {
+            pointer.toKString()
+        } finally {
+            typst_kmp_string_free(pointer)
+        }
+    }
+
+    actual suspend fun compile(requestJson: String, files: List<ByteArray>): NativeResult {
         val result = memScoped {
             val error = alloc<CPointerVar<ByteVar>>()
-            typst_kmp_compile(alive(), requestJson, error.ptr)
-                ?: fail(error, "The native Typst engine failed to compile.")
+            val pointers = allocArray<CPointerVar<UByteVar>>(files.size)
+            val lengths = allocArray<ULongVar>(files.size)
+            // Pin every file for the duration of the call; the engine copies what it keeps.
+            val pinned = files.map { if (it.isEmpty()) null else it.pin() }
+            try {
+                pinned.forEachIndexed { index, pin ->
+                    pointers[index] = pin?.addressOf(0)?.reinterpret()
+                    lengths[index] = files[index].size.convert()
+                }
+                typst_kmp_compile(
+                    alive(),
+                    requestJson,
+                    pointers.reinterpret(),
+                    lengths.reinterpret(),
+                    files.size.convert(),
+                    error.ptr,
+                ) ?: fail(error, "The native Typst engine failed to compile.")
+            } finally {
+                pinned.forEach { it?.unpin() }
+            }
         }
         try {
             val json = typst_kmp_result_json(result)?.toKString()

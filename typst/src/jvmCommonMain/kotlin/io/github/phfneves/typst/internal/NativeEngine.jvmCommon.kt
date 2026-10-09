@@ -36,8 +36,13 @@ internal object TypstNative {
 
     external fun vfsClearPackages(handle: Long): Int
 
-    /** Returns `arrayOf(responseJson: String, blobs: Array<ByteArray>)`. */
-    external fun compile(handle: Long, requestJson: String): Array<Any>
+    /**
+     * Returns `arrayOf(responseJson: String, blobs: Array<ByteArray>)`. [files] holds the bytes of
+     * the request's files, in the order its JSON lists their paths.
+     */
+    external fun compile(handle: Long, requestJson: String, files: Array<ByteArray>): Array<Any>
+
+    external fun inspect(handle: Long): String
 
     external fun nativeVersion(): String
 }
@@ -61,8 +66,10 @@ internal actual class NativeEngine private constructor(configJson: String) {
 
     actual suspend fun vfsClearPackages(): Int = TypstNative.vfsClearPackages(alive())
 
-    actual suspend fun compile(requestJson: String): NativeResult {
-        val raw = TypstNative.compile(alive(), requestJson)
+    actual suspend fun inspect(): String = TypstNative.inspect(alive())
+
+    actual suspend fun compile(requestJson: String, files: List<ByteArray>): NativeResult {
+        val raw = TypstNative.compile(alive(), requestJson, files.toTypedArray())
         val json = raw[0] as String
 
         @Suppress("UNCHECKED_CAST")
