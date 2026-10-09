@@ -38,13 +38,16 @@ can move text by a pixel, and pixel-compared goldens have to be regenerated with
 * A new artifact, `typst-kmp-universe`, with `UniversePackageResolver` to download `@preview`
   packages over Ktor, and `InMemoryPackageCache` and `DirectoryPackageCache` to keep them.
 * A package archive may be a plain `.tar` as well as a `.tar.gz`.
+* `TypstConfig.fontPaths` and `includeSystemFonts`: fonts on disk, indexed when the instance is
+  created and mapped into memory only when a document uses them. Not in the browser.
 
 ### Changed
 
 * Resolution continues for as long as each round supplies something new, so a deep import chain
   no longer needs a raised limit.
 * Resolvers run outside any lock and may call back into the instance.
-* Cancelling `compile()` takes effect between resolution rounds.
+* Cancelling `compile()` interrupts the compilation in progress on Android, the JVM and
+  Kotlin/Native. In the browser it takes effect between resolution rounds.
 
 ### Deprecated
 
