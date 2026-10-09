@@ -1,5 +1,6 @@
 // Klib ABI Dump
 // Targets: [iosArm64, iosSimulatorArm64, iosX64, js, linuxArm64, linuxX64, macosArm64, macosX64, mingwX64, wasmJs]
+// Alias: native => [iosArm64, iosSimulatorArm64, iosX64, linuxArm64, linuxX64, macosArm64, macosX64, mingwX64]
 // Rendering settings:
 // - Signature version: 2
 // - Show manifest properties: true
@@ -284,6 +285,17 @@ final class io.github.phfneves.typst/PackageSpec { // io.github.phfneves.typst/P
     final fun toString(): kotlin/String // io.github.phfneves.typst/PackageSpec.toString|toString(){}[0]
 }
 
+final class io.github.phfneves.typst/RecordingPackageResolver : io.github.phfneves.typst/PackageResolver { // io.github.phfneves.typst/RecordingPackageResolver|null[0]
+    constructor <init>(io.github.phfneves.typst/PackageResolver) // io.github.phfneves.typst/RecordingPackageResolver.<init>|<init>(io.github.phfneves.typst.PackageResolver){}[0]
+
+    final val requested // io.github.phfneves.typst/RecordingPackageResolver.requested|{}requested[0]
+        final fun <get-requested>(): kotlin.collections/List<io.github.phfneves.typst/PackageSpec> // io.github.phfneves.typst/RecordingPackageResolver.requested.<get-requested>|<get-requested>(){}[0]
+    final val unresolved // io.github.phfneves.typst/RecordingPackageResolver.unresolved|{}unresolved[0]
+        final fun <get-unresolved>(): kotlin.collections/List<io.github.phfneves.typst/PackageSpec> // io.github.phfneves.typst/RecordingPackageResolver.unresolved.<get-unresolved>|<get-unresolved>(){}[0]
+
+    final suspend fun resolve(io.github.phfneves.typst/PackageSpec): kotlin/ByteArray? // io.github.phfneves.typst/RecordingPackageResolver.resolve|resolve(io.github.phfneves.typst.PackageSpec){}[0]
+}
+
 final class io.github.phfneves.typst/TracePoint { // io.github.phfneves.typst/TracePoint|null[0]
     constructor <init>(kotlin/String, kotlin/String?, kotlin/Int?, kotlin/Int?) // io.github.phfneves.typst/TracePoint.<init>|<init>(kotlin.String;kotlin.String?;kotlin.Int?;kotlin.Int?){}[0]
 
@@ -409,4 +421,12 @@ final val io.github.phfneves.typst/pdf // io.github.phfneves.typst/pdf|@io.githu
 final val io.github.phfneves.typst/pdfBytes // io.github.phfneves.typst/pdfBytes|@io.github.phfneves.typst.CompileResult{}pdfBytes[0]
     final fun (io.github.phfneves.typst/CompileResult).<get-pdfBytes>(): kotlin/ByteArray? // io.github.phfneves.typst/pdfBytes.<get-pdfBytes>|<get-pdfBytes>@io.github.phfneves.typst.CompileResult(){}[0]
 
+final fun (io.github.phfneves.typst/PackageResolver).io.github.phfneves.typst/orElse(io.github.phfneves.typst/PackageResolver): io.github.phfneves.typst/PackageResolver // io.github.phfneves.typst/orElse|orElse@io.github.phfneves.typst.PackageResolver(io.github.phfneves.typst.PackageResolver){}[0]
 final fun io.github.phfneves.typst/FileResolver(kotlin.collections/Map<kotlin/String, kotlin/ByteArray>): io.github.phfneves.typst/FileResolver // io.github.phfneves.typst/FileResolver|FileResolver(kotlin.collections.Map<kotlin.String,kotlin.ByteArray>){}[0]
+
+// Targets: [native]
+final class io.github.phfneves.typst/DirectoryPackageResolver : io.github.phfneves.typst/PackageResolver { // io.github.phfneves.typst/DirectoryPackageResolver|null[0]
+    constructor <init>(kotlin/String) // io.github.phfneves.typst/DirectoryPackageResolver.<init>|<init>(kotlin.String){}[0]
+
+    final suspend fun resolve(io.github.phfneves.typst/PackageSpec): kotlin/ByteArray? // io.github.phfneves.typst/DirectoryPackageResolver.resolve|resolve(io.github.phfneves.typst.PackageSpec){}[0]
+}

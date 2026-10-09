@@ -74,6 +74,11 @@ public final class io/github/phfneves/typst/Diagnostic {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/phfneves/typst/DirectoryPackageResolver : io/github/phfneves/typst/PackageResolver {
+	public fun <init> (Ljava/lang/String;)V
+	public fun resolve (Lio/github/phfneves/typst/PackageSpec;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
 public abstract interface class io/github/phfneves/typst/FileResolver {
 	public abstract fun resolve (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
@@ -180,6 +185,10 @@ public abstract interface class io/github/phfneves/typst/PackageResolver {
 	public abstract fun resolve (Lio/github/phfneves/typst/PackageSpec;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
+public final class io/github/phfneves/typst/PackageResolversKt {
+	public static final fun orElse (Lio/github/phfneves/typst/PackageResolver;Lio/github/phfneves/typst/PackageResolver;)Lio/github/phfneves/typst/PackageResolver;
+}
+
 public final class io/github/phfneves/typst/PackageSpec {
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
 	public final fun component1 ()Ljava/lang/String;
@@ -206,6 +215,13 @@ public final class io/github/phfneves/typst/PdfStandard : java/lang/Enum {
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Lio/github/phfneves/typst/PdfStandard;
 	public static fun values ()[Lio/github/phfneves/typst/PdfStandard;
+}
+
+public final class io/github/phfneves/typst/RecordingPackageResolver : io/github/phfneves/typst/PackageResolver {
+	public fun <init> (Lio/github/phfneves/typst/PackageResolver;)V
+	public final fun getRequested ()Ljava/util/List;
+	public final fun getUnresolved ()Ljava/util/List;
+	public fun resolve (Lio/github/phfneves/typst/PackageSpec;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class io/github/phfneves/typst/Severity : java/lang/Enum {
