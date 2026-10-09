@@ -57,7 +57,7 @@ jobs:
             artifact: jvm-linux
             os: ubuntu-latest
             rust-targets: x86_64-unknown-linux-gnu
-            tasks: :typst:jvmTest :typst:jvmJarTest :typst:jvmNativeJars :typst:checkKotlinAbi
+            tasks: :typst:jvmTest :typst:jvmJarTest :typst:jvmNativeJars :typst:checkKotlinAbi :typst-universe:jvmTest :typst-universe:checkKotlinAbi
             native-classifier: linux-x86_64
             native-library: libtypst_kmp_jni.so
           - name: JVM (Windows)
@@ -84,7 +84,7 @@ jobs:
             artifact: native-apple
             os: macos-latest
             rust-targets: aarch64-apple-darwin,aarch64-apple-ios-sim
-            tasks: :typst:macosArm64Test :typst:iosSimulatorArm64Test
+            tasks: :typst:macosArm64Test :typst:iosSimulatorArm64Test :typst-universe:macosArm64Test
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -176,7 +176,7 @@ jobs:
       # engine in a Web Worker. No PDF is uploaded afterwards: a browser has nowhere to write one,
       # which is why `writeTestArtifact` returns null on these targets.
       - name: Run the common suite in Chrome
-        run: ./gradlew :typst:jsBrowserTest :typst:wasmJsBrowserTest
+        run: ./gradlew :typst:jsBrowserTest :typst:wasmJsBrowserTest :typst-universe:jsBrowserTest :typst-universe:wasmJsBrowserTest
 
   android:
     name: Android (assemble)
