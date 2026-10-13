@@ -18,6 +18,8 @@ pub struct KmpWorld<'a> {
     book: &'a LazyHash<FontBook>,
     fonts: &'a [Font],
     vfs: &'a Vfs,
+    /// Files belonging to this compilation alone, consulted before [`Self::vfs`].
+    overlay: &'a Vfs,
     main: FileId,
     today: Option<Datetime>,
     /// Every lookup that failed, recorded structurally so the Kotlin resolution loop can act on
@@ -31,6 +33,7 @@ impl<'a> KmpWorld<'a> {
         book: &'a LazyHash<FontBook>,
         fonts: &'a [Font],
         vfs: &'a Vfs,
+        overlay: &'a Vfs,
         main: FileId,
         today: Option<Datetime>,
     ) -> Self {
@@ -39,6 +42,7 @@ impl<'a> KmpWorld<'a> {
             book,
             fonts,
             vfs,
+            overlay,
             main,
             today,
             misses: Mutex::new(BTreeSet::new()),
@@ -71,6 +75,15 @@ impl<'a> KmpWorld<'a> {
         self.misses.lock().expect("miss set poisoned").insert(miss);
     }
 
+    /// The layer that answers for `id`: the overlay when it has the file, the shared VFS otherwise.
+    fn layer(&self, id: FileId) -> &Vfs {
+        if self.overlay.contains(id) {
+            self.overlay
+        } else {
+            self.vfs
+        }
+    }
+
     fn recording<T>(&self, id: FileId, result: FileResult<T>) -> FileResult<T> {
         if matches!(result, Err(FileError::NotFound(_))) {
             self.record_miss(id);
@@ -93,11 +106,11 @@ impl World for KmpWorld<'_> {
     }
 
     fn source(&self, id: FileId) -> FileResult<Source> {
-        self.recording(id, self.vfs.source(id))
+        self.recording(id, self.layer(id).source(id))
     }
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
-        self.recording(id, self.vfs.file(id))
+        self.recording(id, self.layer(id).file(id))
     }
 
     fn font(&self, index: usize) -> Option<Font> {

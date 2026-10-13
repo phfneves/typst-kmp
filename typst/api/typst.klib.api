@@ -1,0 +1,412 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, iosX64, js, linuxArm64, linuxX64, macosArm64, macosX64, mingwX64, wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <io.github.phfneves:typst>
+final enum class io.github.phfneves.typst/PdfStandard : kotlin/Enum<io.github.phfneves.typst/PdfStandard> { // io.github.phfneves.typst/PdfStandard|null[0]
+    enum entry A_2B // io.github.phfneves.typst/PdfStandard.A_2B|null[0]
+    enum entry A_3B // io.github.phfneves.typst/PdfStandard.A_3B|null[0]
+    enum entry V1_4 // io.github.phfneves.typst/PdfStandard.V1_4|null[0]
+    enum entry V1_5 // io.github.phfneves.typst/PdfStandard.V1_5|null[0]
+    enum entry V1_6 // io.github.phfneves.typst/PdfStandard.V1_6|null[0]
+    enum entry V1_7 // io.github.phfneves.typst/PdfStandard.V1_7|null[0]
+    enum entry V2_0 // io.github.phfneves.typst/PdfStandard.V2_0|null[0]
+
+    final val entries // io.github.phfneves.typst/PdfStandard.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.phfneves.typst/PdfStandard> // io.github.phfneves.typst/PdfStandard.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.phfneves.typst/PdfStandard // io.github.phfneves.typst/PdfStandard.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.phfneves.typst/PdfStandard> // io.github.phfneves.typst/PdfStandard.values|values#static(){}[0]
+}
+
+final enum class io.github.phfneves.typst/Severity : kotlin/Enum<io.github.phfneves.typst/Severity> { // io.github.phfneves.typst/Severity|null[0]
+    enum entry ERROR // io.github.phfneves.typst/Severity.ERROR|null[0]
+    enum entry WARNING // io.github.phfneves.typst/Severity.WARNING|null[0]
+
+    final val entries // io.github.phfneves.typst/Severity.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.phfneves.typst/Severity> // io.github.phfneves.typst/Severity.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.phfneves.typst/Severity // io.github.phfneves.typst/Severity.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.phfneves.typst/Severity> // io.github.phfneves.typst/Severity.values|values#static(){}[0]
+}
+
+abstract fun interface io.github.phfneves.typst/FileResolver { // io.github.phfneves.typst/FileResolver|null[0]
+    abstract suspend fun resolve(kotlin/String): kotlin/ByteArray? // io.github.phfneves.typst/FileResolver.resolve|resolve(kotlin.String){}[0]
+}
+
+abstract fun interface io.github.phfneves.typst/PackageResolver { // io.github.phfneves.typst/PackageResolver|null[0]
+    abstract suspend fun resolve(io.github.phfneves.typst/PackageSpec): kotlin/ByteArray? // io.github.phfneves.typst/PackageResolver.resolve|resolve(io.github.phfneves.typst.PackageSpec){}[0]
+}
+
+sealed interface io.github.phfneves.typst/CompileResult { // io.github.phfneves.typst/CompileResult|null[0]
+    abstract val warnings // io.github.phfneves.typst/CompileResult.warnings|{}warnings[0]
+        abstract fun <get-warnings>(): kotlin.collections/List<io.github.phfneves.typst/Diagnostic> // io.github.phfneves.typst/CompileResult.warnings.<get-warnings>|<get-warnings>(){}[0]
+
+    open fun getOrThrow(): kotlin.collections/List<io.github.phfneves.typst/Output> // io.github.phfneves.typst/CompileResult.getOrThrow|getOrThrow(){}[0]
+
+    final class Failure : io.github.phfneves.typst/CompileResult { // io.github.phfneves.typst/CompileResult.Failure|null[0]
+        constructor <init>(kotlin.collections/List<io.github.phfneves.typst/Diagnostic>, kotlin.collections/List<io.github.phfneves.typst/Diagnostic>, kotlin.collections/List<io.github.phfneves.typst/Unresolved>) // io.github.phfneves.typst/CompileResult.Failure.<init>|<init>(kotlin.collections.List<io.github.phfneves.typst.Diagnostic>;kotlin.collections.List<io.github.phfneves.typst.Diagnostic>;kotlin.collections.List<io.github.phfneves.typst.Unresolved>){}[0]
+
+        final val errors // io.github.phfneves.typst/CompileResult.Failure.errors|{}errors[0]
+            final fun <get-errors>(): kotlin.collections/List<io.github.phfneves.typst/Diagnostic> // io.github.phfneves.typst/CompileResult.Failure.errors.<get-errors>|<get-errors>(){}[0]
+        final val unresolved // io.github.phfneves.typst/CompileResult.Failure.unresolved|{}unresolved[0]
+            final fun <get-unresolved>(): kotlin.collections/List<io.github.phfneves.typst/Unresolved> // io.github.phfneves.typst/CompileResult.Failure.unresolved.<get-unresolved>|<get-unresolved>(){}[0]
+        final val warnings // io.github.phfneves.typst/CompileResult.Failure.warnings|{}warnings[0]
+            final fun <get-warnings>(): kotlin.collections/List<io.github.phfneves.typst/Diagnostic> // io.github.phfneves.typst/CompileResult.Failure.warnings.<get-warnings>|<get-warnings>(){}[0]
+    }
+
+    final class Success : io.github.phfneves.typst/CompileResult { // io.github.phfneves.typst/CompileResult.Success|null[0]
+        constructor <init>(kotlin.collections/List<io.github.phfneves.typst/Output>, kotlin.collections/List<io.github.phfneves.typst/Diagnostic>) // io.github.phfneves.typst/CompileResult.Success.<init>|<init>(kotlin.collections.List<io.github.phfneves.typst.Output>;kotlin.collections.List<io.github.phfneves.typst.Diagnostic>){}[0]
+
+        final val outputs // io.github.phfneves.typst/CompileResult.Success.outputs|{}outputs[0]
+            final fun <get-outputs>(): kotlin.collections/List<io.github.phfneves.typst/Output> // io.github.phfneves.typst/CompileResult.Success.outputs.<get-outputs>|<get-outputs>(){}[0]
+        final val warnings // io.github.phfneves.typst/CompileResult.Success.warnings|{}warnings[0]
+            final fun <get-warnings>(): kotlin.collections/List<io.github.phfneves.typst/Diagnostic> // io.github.phfneves.typst/CompileResult.Success.warnings.<get-warnings>|<get-warnings>(){}[0]
+    }
+}
+
+sealed interface io.github.phfneves.typst/Output { // io.github.phfneves.typst/Output|null[0]
+    final class Pdf : io.github.phfneves.typst/Output { // io.github.phfneves.typst/Output.Pdf|null[0]
+        constructor <init>(kotlin/ByteArray) // io.github.phfneves.typst/Output.Pdf.<init>|<init>(kotlin.ByteArray){}[0]
+
+        final val bytes // io.github.phfneves.typst/Output.Pdf.bytes|{}bytes[0]
+            final fun <get-bytes>(): kotlin/ByteArray // io.github.phfneves.typst/Output.Pdf.bytes.<get-bytes>|<get-bytes>(){}[0]
+    }
+
+    final class Png : io.github.phfneves.typst/Output { // io.github.phfneves.typst/Output.Png|null[0]
+        constructor <init>(kotlin.collections/List<kotlin/ByteArray>) // io.github.phfneves.typst/Output.Png.<init>|<init>(kotlin.collections.List<kotlin.ByteArray>){}[0]
+
+        final val pages // io.github.phfneves.typst/Output.Png.pages|{}pages[0]
+            final fun <get-pages>(): kotlin.collections/List<kotlin/ByteArray> // io.github.phfneves.typst/Output.Png.pages.<get-pages>|<get-pages>(){}[0]
+    }
+
+    final class Query : io.github.phfneves.typst/Output { // io.github.phfneves.typst/Output.Query|null[0]
+        constructor <init>(kotlin/String) // io.github.phfneves.typst/Output.Query.<init>|<init>(kotlin.String){}[0]
+
+        final val json // io.github.phfneves.typst/Output.Query.json|{}json[0]
+            final fun <get-json>(): kotlin/String // io.github.phfneves.typst/Output.Query.json.<get-json>|<get-json>(){}[0]
+    }
+
+    final class Svg : io.github.phfneves.typst/Output { // io.github.phfneves.typst/Output.Svg|null[0]
+        constructor <init>(kotlin.collections/List<kotlin/String>) // io.github.phfneves.typst/Output.Svg.<init>|<init>(kotlin.collections.List<kotlin.String>){}[0]
+
+        final val pages // io.github.phfneves.typst/Output.Svg.pages|{}pages[0]
+            final fun <get-pages>(): kotlin.collections/List<kotlin/String> // io.github.phfneves.typst/Output.Svg.pages.<get-pages>|<get-pages>(){}[0]
+    }
+}
+
+sealed interface io.github.phfneves.typst/OutputFormat { // io.github.phfneves.typst/OutputFormat|null[0]
+    final class Pdf : io.github.phfneves.typst/OutputFormat { // io.github.phfneves.typst/OutputFormat.Pdf|null[0]
+        constructor <init>(kotlin/String? = ..., kotlin/String? = ..., kotlin.collections/List<io.github.phfneves.typst/PdfStandard> = ..., kotlin/Boolean = ...) // io.github.phfneves.typst/OutputFormat.Pdf.<init>|<init>(kotlin.String?;kotlin.String?;kotlin.collections.List<io.github.phfneves.typst.PdfStandard>;kotlin.Boolean){}[0]
+
+        final val creator // io.github.phfneves.typst/OutputFormat.Pdf.creator|{}creator[0]
+            final fun <get-creator>(): kotlin/String? // io.github.phfneves.typst/OutputFormat.Pdf.creator.<get-creator>|<get-creator>(){}[0]
+        final val ident // io.github.phfneves.typst/OutputFormat.Pdf.ident|{}ident[0]
+            final fun <get-ident>(): kotlin/String? // io.github.phfneves.typst/OutputFormat.Pdf.ident.<get-ident>|<get-ident>(){}[0]
+        final val pretty // io.github.phfneves.typst/OutputFormat.Pdf.pretty|{}pretty[0]
+            final fun <get-pretty>(): kotlin/Boolean // io.github.phfneves.typst/OutputFormat.Pdf.pretty.<get-pretty>|<get-pretty>(){}[0]
+        final val standards // io.github.phfneves.typst/OutputFormat.Pdf.standards|{}standards[0]
+            final fun <get-standards>(): kotlin.collections/List<io.github.phfneves.typst/PdfStandard> // io.github.phfneves.typst/OutputFormat.Pdf.standards.<get-standards>|<get-standards>(){}[0]
+
+        final fun component1(): kotlin/String? // io.github.phfneves.typst/OutputFormat.Pdf.component1|component1(){}[0]
+        final fun component2(): kotlin/String? // io.github.phfneves.typst/OutputFormat.Pdf.component2|component2(){}[0]
+        final fun component3(): kotlin.collections/List<io.github.phfneves.typst/PdfStandard> // io.github.phfneves.typst/OutputFormat.Pdf.component3|component3(){}[0]
+        final fun component4(): kotlin/Boolean // io.github.phfneves.typst/OutputFormat.Pdf.component4|component4(){}[0]
+        final fun copy(kotlin/String? = ..., kotlin/String? = ..., kotlin.collections/List<io.github.phfneves.typst/PdfStandard> = ..., kotlin/Boolean = ...): io.github.phfneves.typst/OutputFormat.Pdf // io.github.phfneves.typst/OutputFormat.Pdf.copy|copy(kotlin.String?;kotlin.String?;kotlin.collections.List<io.github.phfneves.typst.PdfStandard>;kotlin.Boolean){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.phfneves.typst/OutputFormat.Pdf.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.phfneves.typst/OutputFormat.Pdf.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.phfneves.typst/OutputFormat.Pdf.toString|toString(){}[0]
+    }
+
+    final class Png : io.github.phfneves.typst/OutputFormat { // io.github.phfneves.typst/OutputFormat.Png|null[0]
+        constructor <init>(kotlin/Float = ..., kotlin/Boolean = ...) // io.github.phfneves.typst/OutputFormat.Png.<init>|<init>(kotlin.Float;kotlin.Boolean){}[0]
+
+        final val merged // io.github.phfneves.typst/OutputFormat.Png.merged|{}merged[0]
+            final fun <get-merged>(): kotlin/Boolean // io.github.phfneves.typst/OutputFormat.Png.merged.<get-merged>|<get-merged>(){}[0]
+        final val pixelPerPt // io.github.phfneves.typst/OutputFormat.Png.pixelPerPt|{}pixelPerPt[0]
+            final fun <get-pixelPerPt>(): kotlin/Float // io.github.phfneves.typst/OutputFormat.Png.pixelPerPt.<get-pixelPerPt>|<get-pixelPerPt>(){}[0]
+
+        final fun component1(): kotlin/Float // io.github.phfneves.typst/OutputFormat.Png.component1|component1(){}[0]
+        final fun component2(): kotlin/Boolean // io.github.phfneves.typst/OutputFormat.Png.component2|component2(){}[0]
+        final fun copy(kotlin/Float = ..., kotlin/Boolean = ...): io.github.phfneves.typst/OutputFormat.Png // io.github.phfneves.typst/OutputFormat.Png.copy|copy(kotlin.Float;kotlin.Boolean){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.phfneves.typst/OutputFormat.Png.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.phfneves.typst/OutputFormat.Png.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.phfneves.typst/OutputFormat.Png.toString|toString(){}[0]
+    }
+
+    final class Query : io.github.phfneves.typst/OutputFormat { // io.github.phfneves.typst/OutputFormat.Query|null[0]
+        constructor <init>(kotlin/String, kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ...) // io.github.phfneves.typst/OutputFormat.Query.<init>|<init>(kotlin.String;kotlin.String?;kotlin.Boolean;kotlin.Boolean){}[0]
+
+        final val field // io.github.phfneves.typst/OutputFormat.Query.field|{}field[0]
+            final fun <get-field>(): kotlin/String? // io.github.phfneves.typst/OutputFormat.Query.field.<get-field>|<get-field>(){}[0]
+        final val one // io.github.phfneves.typst/OutputFormat.Query.one|{}one[0]
+            final fun <get-one>(): kotlin/Boolean // io.github.phfneves.typst/OutputFormat.Query.one.<get-one>|<get-one>(){}[0]
+        final val pretty // io.github.phfneves.typst/OutputFormat.Query.pretty|{}pretty[0]
+            final fun <get-pretty>(): kotlin/Boolean // io.github.phfneves.typst/OutputFormat.Query.pretty.<get-pretty>|<get-pretty>(){}[0]
+        final val selector // io.github.phfneves.typst/OutputFormat.Query.selector|{}selector[0]
+            final fun <get-selector>(): kotlin/String // io.github.phfneves.typst/OutputFormat.Query.selector.<get-selector>|<get-selector>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.phfneves.typst/OutputFormat.Query.component1|component1(){}[0]
+        final fun component2(): kotlin/String? // io.github.phfneves.typst/OutputFormat.Query.component2|component2(){}[0]
+        final fun component3(): kotlin/Boolean // io.github.phfneves.typst/OutputFormat.Query.component3|component3(){}[0]
+        final fun component4(): kotlin/Boolean // io.github.phfneves.typst/OutputFormat.Query.component4|component4(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ...): io.github.phfneves.typst/OutputFormat.Query // io.github.phfneves.typst/OutputFormat.Query.copy|copy(kotlin.String;kotlin.String?;kotlin.Boolean;kotlin.Boolean){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.phfneves.typst/OutputFormat.Query.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.phfneves.typst/OutputFormat.Query.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.phfneves.typst/OutputFormat.Query.toString|toString(){}[0]
+    }
+
+    final class Svg : io.github.phfneves.typst/OutputFormat { // io.github.phfneves.typst/OutputFormat.Svg|null[0]
+        constructor <init>(kotlin/Boolean = ..., kotlin/Boolean = ...) // io.github.phfneves.typst/OutputFormat.Svg.<init>|<init>(kotlin.Boolean;kotlin.Boolean){}[0]
+
+        final val merged // io.github.phfneves.typst/OutputFormat.Svg.merged|{}merged[0]
+            final fun <get-merged>(): kotlin/Boolean // io.github.phfneves.typst/OutputFormat.Svg.merged.<get-merged>|<get-merged>(){}[0]
+        final val pretty // io.github.phfneves.typst/OutputFormat.Svg.pretty|{}pretty[0]
+            final fun <get-pretty>(): kotlin/Boolean // io.github.phfneves.typst/OutputFormat.Svg.pretty.<get-pretty>|<get-pretty>(){}[0]
+
+        final fun component1(): kotlin/Boolean // io.github.phfneves.typst/OutputFormat.Svg.component1|component1(){}[0]
+        final fun component2(): kotlin/Boolean // io.github.phfneves.typst/OutputFormat.Svg.component2|component2(){}[0]
+        final fun copy(kotlin/Boolean = ..., kotlin/Boolean = ...): io.github.phfneves.typst/OutputFormat.Svg // io.github.phfneves.typst/OutputFormat.Svg.copy|copy(kotlin.Boolean;kotlin.Boolean){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.phfneves.typst/OutputFormat.Svg.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.phfneves.typst/OutputFormat.Svg.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.phfneves.typst/OutputFormat.Svg.toString|toString(){}[0]
+    }
+}
+
+sealed interface io.github.phfneves.typst/Unresolved { // io.github.phfneves.typst/Unresolved|null[0]
+    final class File : io.github.phfneves.typst/Unresolved { // io.github.phfneves.typst/Unresolved.File|null[0]
+        constructor <init>(kotlin/String) // io.github.phfneves.typst/Unresolved.File.<init>|<init>(kotlin.String){}[0]
+
+        final val path // io.github.phfneves.typst/Unresolved.File.path|{}path[0]
+            final fun <get-path>(): kotlin/String // io.github.phfneves.typst/Unresolved.File.path.<get-path>|<get-path>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.phfneves.typst/Unresolved.File.component1|component1(){}[0]
+        final fun copy(kotlin/String = ...): io.github.phfneves.typst/Unresolved.File // io.github.phfneves.typst/Unresolved.File.copy|copy(kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.phfneves.typst/Unresolved.File.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.phfneves.typst/Unresolved.File.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.phfneves.typst/Unresolved.File.toString|toString(){}[0]
+    }
+
+    final class Package : io.github.phfneves.typst/Unresolved { // io.github.phfneves.typst/Unresolved.Package|null[0]
+        constructor <init>(io.github.phfneves.typst/PackageSpec) // io.github.phfneves.typst/Unresolved.Package.<init>|<init>(io.github.phfneves.typst.PackageSpec){}[0]
+
+        final val spec // io.github.phfneves.typst/Unresolved.Package.spec|{}spec[0]
+            final fun <get-spec>(): io.github.phfneves.typst/PackageSpec // io.github.phfneves.typst/Unresolved.Package.spec.<get-spec>|<get-spec>(){}[0]
+
+        final fun component1(): io.github.phfneves.typst/PackageSpec // io.github.phfneves.typst/Unresolved.Package.component1|component1(){}[0]
+        final fun copy(io.github.phfneves.typst/PackageSpec = ...): io.github.phfneves.typst/Unresolved.Package // io.github.phfneves.typst/Unresolved.Package.copy|copy(io.github.phfneves.typst.PackageSpec){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.phfneves.typst/Unresolved.Package.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.phfneves.typst/Unresolved.Package.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.phfneves.typst/Unresolved.Package.toString|toString(){}[0]
+    }
+}
+
+final class io.github.phfneves.typst/CompileRequest { // io.github.phfneves.typst/CompileRequest|null[0]
+    constructor <init>(kotlin/String = ..., kotlin.collections/Map<kotlin/String, kotlin/ByteArray> = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin.collections/List<io.github.phfneves.typst/OutputFormat> = ..., io.github.phfneves.typst/TypstDate? = ..., io.github.phfneves.typst/FileResolver? = ...) // io.github.phfneves.typst/CompileRequest.<init>|<init>(kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.ByteArray>;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.collections.List<io.github.phfneves.typst.OutputFormat>;io.github.phfneves.typst.TypstDate?;io.github.phfneves.typst.FileResolver?){}[0]
+
+    final val fileResolver // io.github.phfneves.typst/CompileRequest.fileResolver|{}fileResolver[0]
+        final fun <get-fileResolver>(): io.github.phfneves.typst/FileResolver? // io.github.phfneves.typst/CompileRequest.fileResolver.<get-fileResolver>|<get-fileResolver>(){}[0]
+    final val files // io.github.phfneves.typst/CompileRequest.files|{}files[0]
+        final fun <get-files>(): kotlin.collections/Map<kotlin/String, kotlin/ByteArray> // io.github.phfneves.typst/CompileRequest.files.<get-files>|<get-files>(){}[0]
+    final val inputs // io.github.phfneves.typst/CompileRequest.inputs|{}inputs[0]
+        final fun <get-inputs>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.phfneves.typst/CompileRequest.inputs.<get-inputs>|<get-inputs>(){}[0]
+    final val main // io.github.phfneves.typst/CompileRequest.main|{}main[0]
+        final fun <get-main>(): kotlin/String // io.github.phfneves.typst/CompileRequest.main.<get-main>|<get-main>(){}[0]
+    final val now // io.github.phfneves.typst/CompileRequest.now|{}now[0]
+        final fun <get-now>(): io.github.phfneves.typst/TypstDate? // io.github.phfneves.typst/CompileRequest.now.<get-now>|<get-now>(){}[0]
+    final val outputs // io.github.phfneves.typst/CompileRequest.outputs|{}outputs[0]
+        final fun <get-outputs>(): kotlin.collections/List<io.github.phfneves.typst/OutputFormat> // io.github.phfneves.typst/CompileRequest.outputs.<get-outputs>|<get-outputs>(){}[0]
+
+    final object Companion { // io.github.phfneves.typst/CompileRequest.Companion|null[0]
+        final fun of(kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin.collections/List<io.github.phfneves.typst/OutputFormat> = ..., io.github.phfneves.typst/TypstDate? = ...): io.github.phfneves.typst/CompileRequest // io.github.phfneves.typst/CompileRequest.Companion.of|of(kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.collections.List<io.github.phfneves.typst.OutputFormat>;io.github.phfneves.typst.TypstDate?){}[0]
+    }
+}
+
+final class io.github.phfneves.typst/Diagnostic { // io.github.phfneves.typst/Diagnostic|null[0]
+    constructor <init>(io.github.phfneves.typst/Severity, kotlin/String, kotlin/String?, kotlin/Int?, kotlin/Int?, kotlin/Int?, kotlin/Int?, kotlin.collections/List<kotlin/String>, kotlin.collections/List<io.github.phfneves.typst/TracePoint>, kotlin/String = ...) // io.github.phfneves.typst/Diagnostic.<init>|<init>(io.github.phfneves.typst.Severity;kotlin.String;kotlin.String?;kotlin.Int?;kotlin.Int?;kotlin.Int?;kotlin.Int?;kotlin.collections.List<kotlin.String>;kotlin.collections.List<io.github.phfneves.typst.TracePoint>;kotlin.String){}[0]
+
+    final val column // io.github.phfneves.typst/Diagnostic.column|{}column[0]
+        final fun <get-column>(): kotlin/Int? // io.github.phfneves.typst/Diagnostic.column.<get-column>|<get-column>(){}[0]
+    final val end // io.github.phfneves.typst/Diagnostic.end|{}end[0]
+        final fun <get-end>(): kotlin/Int? // io.github.phfneves.typst/Diagnostic.end.<get-end>|<get-end>(){}[0]
+    final val hints // io.github.phfneves.typst/Diagnostic.hints|{}hints[0]
+        final fun <get-hints>(): kotlin.collections/List<kotlin/String> // io.github.phfneves.typst/Diagnostic.hints.<get-hints>|<get-hints>(){}[0]
+    final val line // io.github.phfneves.typst/Diagnostic.line|{}line[0]
+        final fun <get-line>(): kotlin/Int? // io.github.phfneves.typst/Diagnostic.line.<get-line>|<get-line>(){}[0]
+    final val message // io.github.phfneves.typst/Diagnostic.message|{}message[0]
+        final fun <get-message>(): kotlin/String // io.github.phfneves.typst/Diagnostic.message.<get-message>|<get-message>(){}[0]
+    final val path // io.github.phfneves.typst/Diagnostic.path|{}path[0]
+        final fun <get-path>(): kotlin/String? // io.github.phfneves.typst/Diagnostic.path.<get-path>|<get-path>(){}[0]
+    final val rendered // io.github.phfneves.typst/Diagnostic.rendered|{}rendered[0]
+        final fun <get-rendered>(): kotlin/String // io.github.phfneves.typst/Diagnostic.rendered.<get-rendered>|<get-rendered>(){}[0]
+    final val severity // io.github.phfneves.typst/Diagnostic.severity|{}severity[0]
+        final fun <get-severity>(): io.github.phfneves.typst/Severity // io.github.phfneves.typst/Diagnostic.severity.<get-severity>|<get-severity>(){}[0]
+    final val start // io.github.phfneves.typst/Diagnostic.start|{}start[0]
+        final fun <get-start>(): kotlin/Int? // io.github.phfneves.typst/Diagnostic.start.<get-start>|<get-start>(){}[0]
+    final val trace // io.github.phfneves.typst/Diagnostic.trace|{}trace[0]
+        final fun <get-trace>(): kotlin.collections/List<io.github.phfneves.typst/TracePoint> // io.github.phfneves.typst/Diagnostic.trace.<get-trace>|<get-trace>(){}[0]
+
+    final fun component1(): io.github.phfneves.typst/Severity // io.github.phfneves.typst/Diagnostic.component1|component1(){}[0]
+    final fun component10(): kotlin/String // io.github.phfneves.typst/Diagnostic.component10|component10(){}[0]
+    final fun component2(): kotlin/String // io.github.phfneves.typst/Diagnostic.component2|component2(){}[0]
+    final fun component3(): kotlin/String? // io.github.phfneves.typst/Diagnostic.component3|component3(){}[0]
+    final fun component4(): kotlin/Int? // io.github.phfneves.typst/Diagnostic.component4|component4(){}[0]
+    final fun component5(): kotlin/Int? // io.github.phfneves.typst/Diagnostic.component5|component5(){}[0]
+    final fun component6(): kotlin/Int? // io.github.phfneves.typst/Diagnostic.component6|component6(){}[0]
+    final fun component7(): kotlin/Int? // io.github.phfneves.typst/Diagnostic.component7|component7(){}[0]
+    final fun component8(): kotlin.collections/List<kotlin/String> // io.github.phfneves.typst/Diagnostic.component8|component8(){}[0]
+    final fun component9(): kotlin.collections/List<io.github.phfneves.typst/TracePoint> // io.github.phfneves.typst/Diagnostic.component9|component9(){}[0]
+    final fun copy(io.github.phfneves.typst/Severity = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<io.github.phfneves.typst/TracePoint> = ..., kotlin/String = ...): io.github.phfneves.typst/Diagnostic // io.github.phfneves.typst/Diagnostic.copy|copy(io.github.phfneves.typst.Severity;kotlin.String;kotlin.String?;kotlin.Int?;kotlin.Int?;kotlin.Int?;kotlin.Int?;kotlin.collections.List<kotlin.String>;kotlin.collections.List<io.github.phfneves.typst.TracePoint>;kotlin.String){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.phfneves.typst/Diagnostic.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.phfneves.typst/Diagnostic.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.phfneves.typst/Diagnostic.toString|toString(){}[0]
+}
+
+final class io.github.phfneves.typst/PackageSpec { // io.github.phfneves.typst/PackageSpec|null[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/String) // io.github.phfneves.typst/PackageSpec.<init>|<init>(kotlin.String;kotlin.String;kotlin.String){}[0]
+
+    final val name // io.github.phfneves.typst/PackageSpec.name|{}name[0]
+        final fun <get-name>(): kotlin/String // io.github.phfneves.typst/PackageSpec.name.<get-name>|<get-name>(){}[0]
+    final val namespace // io.github.phfneves.typst/PackageSpec.namespace|{}namespace[0]
+        final fun <get-namespace>(): kotlin/String // io.github.phfneves.typst/PackageSpec.namespace.<get-namespace>|<get-namespace>(){}[0]
+    final val version // io.github.phfneves.typst/PackageSpec.version|{}version[0]
+        final fun <get-version>(): kotlin/String // io.github.phfneves.typst/PackageSpec.version.<get-version>|<get-version>(){}[0]
+
+    final fun component1(): kotlin/String // io.github.phfneves.typst/PackageSpec.component1|component1(){}[0]
+    final fun component2(): kotlin/String // io.github.phfneves.typst/PackageSpec.component2|component2(){}[0]
+    final fun component3(): kotlin/String // io.github.phfneves.typst/PackageSpec.component3|component3(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ...): io.github.phfneves.typst/PackageSpec // io.github.phfneves.typst/PackageSpec.copy|copy(kotlin.String;kotlin.String;kotlin.String){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.phfneves.typst/PackageSpec.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.phfneves.typst/PackageSpec.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.phfneves.typst/PackageSpec.toString|toString(){}[0]
+}
+
+final class io.github.phfneves.typst/TracePoint { // io.github.phfneves.typst/TracePoint|null[0]
+    constructor <init>(kotlin/String, kotlin/String?, kotlin/Int?, kotlin/Int?) // io.github.phfneves.typst/TracePoint.<init>|<init>(kotlin.String;kotlin.String?;kotlin.Int?;kotlin.Int?){}[0]
+
+    final val column // io.github.phfneves.typst/TracePoint.column|{}column[0]
+        final fun <get-column>(): kotlin/Int? // io.github.phfneves.typst/TracePoint.column.<get-column>|<get-column>(){}[0]
+    final val line // io.github.phfneves.typst/TracePoint.line|{}line[0]
+        final fun <get-line>(): kotlin/Int? // io.github.phfneves.typst/TracePoint.line.<get-line>|<get-line>(){}[0]
+    final val message // io.github.phfneves.typst/TracePoint.message|{}message[0]
+        final fun <get-message>(): kotlin/String // io.github.phfneves.typst/TracePoint.message.<get-message>|<get-message>(){}[0]
+    final val path // io.github.phfneves.typst/TracePoint.path|{}path[0]
+        final fun <get-path>(): kotlin/String? // io.github.phfneves.typst/TracePoint.path.<get-path>|<get-path>(){}[0]
+
+    final fun component1(): kotlin/String // io.github.phfneves.typst/TracePoint.component1|component1(){}[0]
+    final fun component2(): kotlin/String? // io.github.phfneves.typst/TracePoint.component2|component2(){}[0]
+    final fun component3(): kotlin/Int? // io.github.phfneves.typst/TracePoint.component3|component3(){}[0]
+    final fun component4(): kotlin/Int? // io.github.phfneves.typst/TracePoint.component4|component4(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String? = ..., kotlin/Int? = ..., kotlin/Int? = ...): io.github.phfneves.typst/TracePoint // io.github.phfneves.typst/TracePoint.copy|copy(kotlin.String;kotlin.String?;kotlin.Int?;kotlin.Int?){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.phfneves.typst/TracePoint.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.phfneves.typst/TracePoint.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.phfneves.typst/TracePoint.toString|toString(){}[0]
+}
+
+final class io.github.phfneves.typst/Typst : kotlin/AutoCloseable { // io.github.phfneves.typst/Typst|null[0]
+    final fun close() // io.github.phfneves.typst/Typst.close|close(){}[0]
+    final suspend fun addFont(kotlin/ByteArray): kotlin/Int // io.github.phfneves.typst/Typst.addFont|addFont(kotlin.ByteArray){}[0]
+    final suspend fun clearFiles(): kotlin/Int // io.github.phfneves.typst/Typst.clearFiles|clearFiles(){}[0]
+    final suspend fun clearPackages(): kotlin/Int // io.github.phfneves.typst/Typst.clearPackages|clearPackages(){}[0]
+    final suspend fun compile(io.github.phfneves.typst/CompileRequest): io.github.phfneves.typst/CompileResult // io.github.phfneves.typst/Typst.compile|compile(io.github.phfneves.typst.CompileRequest){}[0]
+    final suspend fun compilePdf(io.github.phfneves.typst/CompileRequest): kotlin/ByteArray // io.github.phfneves.typst/Typst.compilePdf|compilePdf(io.github.phfneves.typst.CompileRequest){}[0]
+    final suspend fun fontFamilies(): kotlin.collections/List<kotlin/String> // io.github.phfneves.typst/Typst.fontFamilies|fontFamilies(){}[0]
+    final suspend fun listFiles(): kotlin.collections/List<io.github.phfneves.typst/VfsEntry> // io.github.phfneves.typst/Typst.listFiles|listFiles(){}[0]
+    final suspend fun listPackages(): kotlin.collections/List<io.github.phfneves.typst/PackageSpec> // io.github.phfneves.typst/Typst.listPackages|listPackages(){}[0]
+    final suspend fun removeFile(kotlin/String): kotlin/Boolean // io.github.phfneves.typst/Typst.removeFile|removeFile(kotlin.String){}[0]
+
+    final object Companion { // io.github.phfneves.typst/Typst.Companion|null[0]
+        final suspend fun create(io.github.phfneves.typst/TypstConfig = ...): io.github.phfneves.typst/Typst // io.github.phfneves.typst/Typst.Companion.create|create(io.github.phfneves.typst.TypstConfig){}[0]
+    }
+}
+
+final class io.github.phfneves.typst/TypstCompilationException : io.github.phfneves.typst/TypstException { // io.github.phfneves.typst/TypstCompilationException|null[0]
+    constructor <init>(kotlin.collections/List<io.github.phfneves.typst/Diagnostic>, kotlin.collections/List<io.github.phfneves.typst/Unresolved>) // io.github.phfneves.typst/TypstCompilationException.<init>|<init>(kotlin.collections.List<io.github.phfneves.typst.Diagnostic>;kotlin.collections.List<io.github.phfneves.typst.Unresolved>){}[0]
+
+    final val errors // io.github.phfneves.typst/TypstCompilationException.errors|{}errors[0]
+        final fun <get-errors>(): kotlin.collections/List<io.github.phfneves.typst/Diagnostic> // io.github.phfneves.typst/TypstCompilationException.errors.<get-errors>|<get-errors>(){}[0]
+    final val unresolved // io.github.phfneves.typst/TypstCompilationException.unresolved|{}unresolved[0]
+        final fun <get-unresolved>(): kotlin.collections/List<io.github.phfneves.typst/Unresolved> // io.github.phfneves.typst/TypstCompilationException.unresolved.<get-unresolved>|<get-unresolved>(){}[0]
+}
+
+final class io.github.phfneves.typst/TypstConfig { // io.github.phfneves.typst/TypstConfig|null[0]
+    constructor <init>(kotlin/Boolean = ..., kotlin.collections/List<kotlin/ByteArray> = ..., io.github.phfneves.typst/FileResolver? = ..., io.github.phfneves.typst/PackageResolver? = ..., kotlin/Int = ..., kotlin/String? = ...) // io.github.phfneves.typst/TypstConfig.<init>|<init>(kotlin.Boolean;kotlin.collections.List<kotlin.ByteArray>;io.github.phfneves.typst.FileResolver?;io.github.phfneves.typst.PackageResolver?;kotlin.Int;kotlin.String?){}[0]
+
+    final val embedDefaultFonts // io.github.phfneves.typst/TypstConfig.embedDefaultFonts|{}embedDefaultFonts[0]
+        final fun <get-embedDefaultFonts>(): kotlin/Boolean // io.github.phfneves.typst/TypstConfig.embedDefaultFonts.<get-embedDefaultFonts>|<get-embedDefaultFonts>(){}[0]
+    final val fileResolver // io.github.phfneves.typst/TypstConfig.fileResolver|{}fileResolver[0]
+        final fun <get-fileResolver>(): io.github.phfneves.typst/FileResolver? // io.github.phfneves.typst/TypstConfig.fileResolver.<get-fileResolver>|<get-fileResolver>(){}[0]
+    final val fonts // io.github.phfneves.typst/TypstConfig.fonts|{}fonts[0]
+        final fun <get-fonts>(): kotlin.collections/List<kotlin/ByteArray> // io.github.phfneves.typst/TypstConfig.fonts.<get-fonts>|<get-fonts>(){}[0]
+    final val maxResolveRounds // io.github.phfneves.typst/TypstConfig.maxResolveRounds|{}maxResolveRounds[0]
+        final fun <get-maxResolveRounds>(): kotlin/Int // io.github.phfneves.typst/TypstConfig.maxResolveRounds.<get-maxResolveRounds>|<get-maxResolveRounds>(){}[0]
+    final val packageResolver // io.github.phfneves.typst/TypstConfig.packageResolver|{}packageResolver[0]
+        final fun <get-packageResolver>(): io.github.phfneves.typst/PackageResolver? // io.github.phfneves.typst/TypstConfig.packageResolver.<get-packageResolver>|<get-packageResolver>(){}[0]
+    final val webAssetBaseUrl // io.github.phfneves.typst/TypstConfig.webAssetBaseUrl|{}webAssetBaseUrl[0]
+        final fun <get-webAssetBaseUrl>(): kotlin/String? // io.github.phfneves.typst/TypstConfig.webAssetBaseUrl.<get-webAssetBaseUrl>|<get-webAssetBaseUrl>(){}[0]
+}
+
+final class io.github.phfneves.typst/TypstDate { // io.github.phfneves.typst/TypstDate|null[0]
+    constructor <init>(kotlin/Int, kotlin/Int, kotlin/Int, kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ...) // io.github.phfneves.typst/TypstDate.<init>|<init>(kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Int){}[0]
+
+    final val day // io.github.phfneves.typst/TypstDate.day|{}day[0]
+        final fun <get-day>(): kotlin/Int // io.github.phfneves.typst/TypstDate.day.<get-day>|<get-day>(){}[0]
+    final val hour // io.github.phfneves.typst/TypstDate.hour|{}hour[0]
+        final fun <get-hour>(): kotlin/Int // io.github.phfneves.typst/TypstDate.hour.<get-hour>|<get-hour>(){}[0]
+    final val minute // io.github.phfneves.typst/TypstDate.minute|{}minute[0]
+        final fun <get-minute>(): kotlin/Int // io.github.phfneves.typst/TypstDate.minute.<get-minute>|<get-minute>(){}[0]
+    final val month // io.github.phfneves.typst/TypstDate.month|{}month[0]
+        final fun <get-month>(): kotlin/Int // io.github.phfneves.typst/TypstDate.month.<get-month>|<get-month>(){}[0]
+    final val offsetMinutes // io.github.phfneves.typst/TypstDate.offsetMinutes|{}offsetMinutes[0]
+        final fun <get-offsetMinutes>(): kotlin/Int // io.github.phfneves.typst/TypstDate.offsetMinutes.<get-offsetMinutes>|<get-offsetMinutes>(){}[0]
+    final val second // io.github.phfneves.typst/TypstDate.second|{}second[0]
+        final fun <get-second>(): kotlin/Int // io.github.phfneves.typst/TypstDate.second.<get-second>|<get-second>(){}[0]
+    final val year // io.github.phfneves.typst/TypstDate.year|{}year[0]
+        final fun <get-year>(): kotlin/Int // io.github.phfneves.typst/TypstDate.year.<get-year>|<get-year>(){}[0]
+
+    final fun component1(): kotlin/Int // io.github.phfneves.typst/TypstDate.component1|component1(){}[0]
+    final fun component2(): kotlin/Int // io.github.phfneves.typst/TypstDate.component2|component2(){}[0]
+    final fun component3(): kotlin/Int // io.github.phfneves.typst/TypstDate.component3|component3(){}[0]
+    final fun component4(): kotlin/Int // io.github.phfneves.typst/TypstDate.component4|component4(){}[0]
+    final fun component5(): kotlin/Int // io.github.phfneves.typst/TypstDate.component5|component5(){}[0]
+    final fun component6(): kotlin/Int // io.github.phfneves.typst/TypstDate.component6|component6(){}[0]
+    final fun component7(): kotlin/Int // io.github.phfneves.typst/TypstDate.component7|component7(){}[0]
+    final fun copy(kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ...): io.github.phfneves.typst/TypstDate // io.github.phfneves.typst/TypstDate.copy|copy(kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Int){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.phfneves.typst/TypstDate.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.phfneves.typst/TypstDate.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.phfneves.typst/TypstDate.toString|toString(){}[0]
+}
+
+final class io.github.phfneves.typst/TypstNativeException : io.github.phfneves.typst/TypstException { // io.github.phfneves.typst/TypstNativeException|null[0]
+    constructor <init>(kotlin/String) // io.github.phfneves.typst/TypstNativeException.<init>|<init>(kotlin.String){}[0]
+}
+
+final class io.github.phfneves.typst/VfsEntry { // io.github.phfneves.typst/VfsEntry|null[0]
+    constructor <init>(kotlin/String, kotlin/Long) // io.github.phfneves.typst/VfsEntry.<init>|<init>(kotlin.String;kotlin.Long){}[0]
+
+    final val path // io.github.phfneves.typst/VfsEntry.path|{}path[0]
+        final fun <get-path>(): kotlin/String // io.github.phfneves.typst/VfsEntry.path.<get-path>|<get-path>(){}[0]
+    final val size // io.github.phfneves.typst/VfsEntry.size|{}size[0]
+        final fun <get-size>(): kotlin/Long // io.github.phfneves.typst/VfsEntry.size.<get-size>|<get-size>(){}[0]
+
+    final fun component1(): kotlin/String // io.github.phfneves.typst/VfsEntry.component1|component1(){}[0]
+    final fun component2(): kotlin/Long // io.github.phfneves.typst/VfsEntry.component2|component2(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/Long = ...): io.github.phfneves.typst/VfsEntry // io.github.phfneves.typst/VfsEntry.copy|copy(kotlin.String;kotlin.Long){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.phfneves.typst/VfsEntry.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.phfneves.typst/VfsEntry.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.phfneves.typst/VfsEntry.toString|toString(){}[0]
+}
+
+open class io.github.phfneves.typst/TypstException : kotlin/RuntimeException { // io.github.phfneves.typst/TypstException|null[0]
+    constructor <init>(kotlin/String, kotlin/Throwable? = ...) // io.github.phfneves.typst/TypstException.<init>|<init>(kotlin.String;kotlin.Throwable?){}[0]
+}
+
+final val io.github.phfneves.typst/pdf // io.github.phfneves.typst/pdf|@io.github.phfneves.typst.CompileResult.Success{}pdf[0]
+    final fun (io.github.phfneves.typst/CompileResult.Success).<get-pdf>(): kotlin/ByteArray // io.github.phfneves.typst/pdf.<get-pdf>|<get-pdf>@io.github.phfneves.typst.CompileResult.Success(){}[0]
+final val io.github.phfneves.typst/pdfBytes // io.github.phfneves.typst/pdfBytes|@io.github.phfneves.typst.CompileResult{}pdfBytes[0]
+    final fun (io.github.phfneves.typst/CompileResult).<get-pdfBytes>(): kotlin/ByteArray? // io.github.phfneves.typst/pdfBytes.<get-pdfBytes>|<get-pdfBytes>@io.github.phfneves.typst.CompileResult(){}[0]
+
+final fun io.github.phfneves.typst/FileResolver(kotlin.collections/Map<kotlin/String, kotlin/ByteArray>): io.github.phfneves.typst/FileResolver // io.github.phfneves.typst/FileResolver|FileResolver(kotlin.collections.Map<kotlin.String,kotlin.ByteArray>){}[0]

@@ -4,7 +4,9 @@ The [Typst](https://typst.app) typesetting compiler as a Kotlin Multiplatform li
 binary to install, no subprocess, no server round-trip. The compiler is embedded and runs in
 process on Android, the JVM, iOS, macOS, Linux, Windows and in the browser.
 
-> **Status: alpha.** The current release is `0.1.0-alpha02`; the API may still change.
+> **Status: alpha.** The current release is `0.1.0-alpha02`, embedding Typst 0.15; the API may still
+> change. [CHANGELOG.md](CHANGELOG.md) lists what changed in each release and which Typst version
+> it embeds.
 > The same 13-test `commonTest` suite runs green on the JVM (JNI), on Kotlin/Native (cinterop),
 > on an Android emulator (instrumented) and in a browser on both `js` and `wasmJs`
 > (wasm-bindgen), on top of 15 Rust tests. Each run compiles a real multi-page document and —
@@ -244,7 +246,11 @@ traversal is impossible because there are no paths, and it is the only design th
 browser, where a package download is inherently asynchronous and cannot happen inside a synchronous
 call into WebAssembly.
 
-Supply the resolvers through `TypstConfig`:
+The loop runs for as long as each round resolves something new, so there is no depth to configure.
+Every file imported at the same depth arrives in one round, and Typst's caches carry the work
+already done into the next, so a deep import chain costs little more than a shallow one.
+
+Supply the resolvers through `TypstConfig`, or per request through `CompileRequest.fileResolver`:
 
 ```kotlin
 val config = TypstConfig(
@@ -256,51 +262,78 @@ val config = TypstConfig(
 ### Sharing an instance
 
 `Typst.create()` loads every font, so create one instance and share it across the application. It
-is safe to call from any coroutine or thread. The instance runs one operation at a time: a
-compilation holds it from writing `CompileRequest.files` to producing its last output, so two
-compilations that both write `/main.typ` or `/data.json` never see each other's files. They queue
-rather than run in parallel; for throughput, keep a small pool of instances instead.
+is safe to call from any coroutine or thread, and compilations on it run in parallel on the JVM,
+Android and Kotlin/Native. Each compilation sees only its own request files, so two that both pass
+`/main.typ` or `/data.json` never see each other's. In the browser the engine is a single Web
+Worker and compilations queue.
 
-Resolvers run while the compilation holds the instance, so a resolver must not call back into it.
+Calls that change the instance — `addFont`, `removeFile`, `clearFiles`, `clearPackages`, and storing
+what the instance's resolvers return — wait for the compilations in progress and run alone.
+Resolvers run outside any lock and may call back into the instance.
 
-`close()` is safe at any time. A compilation already running finishes first and the engine is
-released when it returns; any call made after that fails with `IllegalStateException`.
+`close()` is safe at any time. Operations already running finish first and the engine is released
+when the last one returns; any call made after that fails with `IllegalStateException`.
+
+### Concurrency and cancellation
+
+Cancelling the coroutine that called `compile()` stops it between resolution rounds. A round
+already running in native code finishes first: the Typst compiler has no way to be interrupted, so
+a `withTimeout` stops waiting on time but the CPU work of that round still completes.
 
 ### What stays in the virtual file system
 
-The virtual file system belongs to the instance and outlives each compilation:
+The compiler sees two layers of files:
 
 | Source | Lifetime |
 | --- | --- |
-| `CompileRequest.files` | written before every compilation, replacing what was at those paths, then kept |
-| `fileResolver` | kept; the resolver is not asked for that path again |
-| `packageResolver` | kept; a published package version never changes |
+| `CompileRequest.files` | this compilation only; shadows an instance file at the same path |
+| `CompileRequest.fileResolver` | this compilation only; asked before `TypstConfig.fileResolver` |
+| `TypstConfig.fileResolver` | kept by the instance; the resolver is not asked for that path again |
+| `TypstConfig.packageResolver` | kept by the instance; a published package version never changes |
 
 That gives two rules:
 
-* **Data that changes goes in the request.** A JSON payload, a generated chart, a photo that can be
-  replaced under the same path: pass them in `CompileRequest.files`. Served through the resolver,
-  only the first version would ever be read.
-* **Clear what accumulates.** Nothing is removed on its own, so documents that keep bringing new
-  paths, such as one image per record, grow the instance's memory with every compilation.
-  `clearFiles()` removes every file but keeps fonts and packages. Calling it after each compilation
-  costs no more than resolving those files again. `removeFile(path)` drops a single file and
-  `clearPackages()` drops the packages.
+* **Anything tied to a request goes in the request.** A JSON payload, a template picked per call, a
+  photo that can be replaced under the same path: pass them in `CompileRequest.files`, or serve them
+  from `CompileRequest.fileResolver`. Nothing has to be cleaned up afterwards.
+* **The instance's resolver is a cache.** Use it for assets that never change under a path. Nothing
+  is removed from it on its own; `removeFile(path)` drops one file, `clearFiles()` all of them, and
+  `clearPackages()` the packages.
 
 ```kotlin
-val typst = Typst.create(TypstConfig(fonts = fonts, fileResolver = images))
+val typst = Typst.create(TypstConfig(fonts = fonts, fileResolver = sharedImages))
 
-suspend fun render(data: ByteArray): ByteArray {
-    val result = typst.compile(
-        CompileRequest(files = mapOf("/main.typ" to template, "/data.json" to data)),
-    )
-    typst.clearFiles()
-    return result.getOrThrow().filterIsInstance<Output.Pdf>().single().bytes
-}
+suspend fun render(templateDir: Path, data: ByteArray): ByteArray = typst.compilePdf(
+    CompileRequest(
+        files = mapOf("/data.json" to data),
+        fileResolver = FileResolver { path -> readOrNull(templateDir, path) },
+    ),
+)
 ```
 
 Typst's own memoisation cache is trimmed after every compilation, so it does not grow with the
 number of documents either.
+
+## Fonts
+
+Every instance starts with the fonts embedded in the native library: Libertinus Serif, New Computer
+Modern and DejaVu Sans Mono. Anything else goes in `TypstConfig.fonts` as the bytes of a font file,
+each face of a collection included, or later through `addFont()`. `fontFamilies()` lists what an
+instance can use. A document that names a family missing from that list compiles anyway, with
+Typst's `unknown font family` warning in `CompileResult.warnings`.
+
+Fonts are part of the app, so they ship with it:
+
+* **Android:** put the files under `src/main/assets/fonts/` and read them with
+  `context.assets.open("fonts/Inter.ttf").use { it.readBytes() }`.
+* **iOS:** add the files to the app target in Xcode so they land in the bundle, then read them
+  from Kotlin with `NSBundle.mainBundle.pathForResource("Inter", "ttf")` and
+  `NSData.dataWithContentsOfFile(path)`, copied into a `ByteArray`. A Compose Multiplatform app can
+  use `Res.readBytes("files/fonts/Inter.ttf")` on every platform instead.
+* **JVM:** read them from the classpath with `javaClass.getResourceAsStream(...)`.
+
+Every face stays in memory for the lifetime of the instance, which is one more reason to keep a
+single shared instance.
 
 ## Outputs
 
@@ -536,10 +569,13 @@ points at a separate `com.android.library` module as the way out.
 ## Known trade-offs
 
 * **Binary size.** Measured on release builds: 39.8 MB (arm64-v8a), 33.8 MB (armeabi-v7a),
-  43.3 MB (x86_64) and 41.4 MB for the Windows JVM library. Roughly 10 MB of that is the embedded
+  43.3 MB (x86_64), 41.4 MB for the Windows JVM library and 38.4 MB for the macOS one. On
+  Apple targets the library is a 58 MB static archive per architecture, which the linker trims
+  when it builds the app. Roughly 10 MB of that is the embedded
   font bundle — build the Rust crates with `--no-default-features` to drop `embed-fonts` and
   supply fonts through `TypstConfig.fonts` instead. Android apps should rely on ABI splits or app
-  bundles so a device only downloads its own architecture.
+  bundles so a device only downloads its own architecture. PDF, SVG and PNG export are always
+  compiled in: there are no feature flags to drop an output format yet.
 * **The JVM native library ships separately from the classes.** `typst-kmp-jvm` carries only
   bytecode; the JNI library comes from a classifier jar (see [Installation](#installation)). A
   single-platform application downloads one library instead of five, at the cost of one dependency

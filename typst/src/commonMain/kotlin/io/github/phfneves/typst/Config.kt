@@ -14,20 +14,22 @@ public class TypstConfig(
     /**
      * Supplies files the document reads but the request did not include.
      *
-     * What it returns is kept in the VFS, and the same path is not asked for again until
+     * What it returns is kept by the instance, and the same path is not asked for again until
      * [Typst.removeFile] or [Typst.clearFiles] removes it. Serve files that change under the same
-     * path through [CompileRequest.files] instead.
+     * path, or that depend on the request, through [CompileRequest.files] or
+     * [CompileRequest.fileResolver] instead.
      */
     public val fileResolver: FileResolver? = null,
     /** Supplies `.tar.gz` archives for `@namespace/name:version` imports. */
     public val packageResolver: PackageResolver? = null,
     /**
-     * How many resolve-and-retry rounds a single compilation may take.
+     * An upper bound on the resolve-and-retry rounds of a single compilation.
      *
-     * Each round satisfies every miss the compiler reported at once, so this bounds the *depth*
-     * of the dependency chain, not the number of files.
+     * Compilation now carries on for as long as each round resolves something new, which always
+     * ends, so there is no depth to tune any more.
      */
-    public val maxResolveRounds: Int = 8,
+    @Deprecated("Resolution no longer needs a bound; leave this unset. It will be removed.")
+    public val maxResolveRounds: Int = Int.MAX_VALUE,
     /**
      * Web only: where the WebAssembly module and its glue are served from.
      *
@@ -46,18 +48,12 @@ public class TypstConfig(
  *
  * Return `null` for paths you do not serve; the compilation then fails with the path listed in
  * [CompileResult.Failure.unresolved].
- *
- * It runs while the compilation holds its [Typst] instance, so it must not call that instance.
  */
 public fun interface FileResolver {
     public suspend fun resolve(path: String): ByteArray?
 }
 
-/**
- * Supplies the `.tar.gz` archive of a Typst package.
- *
- * It runs while the compilation holds its [Typst] instance, so it must not call that instance.
- */
+/** Supplies the `.tar.gz` archive of a Typst package. */
 public fun interface PackageResolver {
     public suspend fun resolve(spec: PackageSpec): ByteArray?
 }

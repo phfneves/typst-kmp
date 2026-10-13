@@ -31,7 +31,14 @@ internal expect class NativeEngine {
     /** Removes every package; returns how many packages were removed. */
     suspend fun vfsClearPackages(): Int
 
-    suspend fun compile(requestJson: String): NativeResult
+    /** What the engine holds, as the JSON `typst-kmp-core` produces for an inspection. */
+    suspend fun inspect(): String
+
+    /**
+     * Compiles a request. [files] holds the bytes of the request's own files, in the order its
+     * JSON lists their paths; they exist for this call alone and never enter the shared VFS.
+     */
+    suspend fun compile(requestJson: String, files: List<ByteArray>): NativeResult
 
     fun close()
 }

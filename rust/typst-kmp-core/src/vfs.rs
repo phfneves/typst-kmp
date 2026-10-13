@@ -127,6 +127,16 @@ impl Vfs {
         before - self.files.len()
     }
 
+    /// Every file with its size in bytes, packages included.
+    pub fn entries(&self) -> impl Iterator<Item = (FileId, usize)> + '_ {
+        self.files.iter().map(|(id, bytes)| (*id, bytes.len()))
+    }
+
+    /// The `@namespace/name:version` of every package loaded.
+    pub fn package_specs(&self) -> impl Iterator<Item = &str> + '_ {
+        self.packages.keys().map(String::as_str)
+    }
+
     pub fn contains(&self, id: FileId) -> bool {
         self.files.contains_key(&id)
     }

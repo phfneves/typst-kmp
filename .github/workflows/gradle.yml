@@ -57,7 +57,7 @@ jobs:
             artifact: jvm-linux
             os: ubuntu-latest
             rust-targets: x86_64-unknown-linux-gnu
-            tasks: :typst:jvmTest :typst:jvmJarTest :typst:jvmNativeJars
+            tasks: :typst:jvmTest :typst:jvmJarTest :typst:jvmNativeJars :typst:checkKotlinAbi
             native-classifier: linux-x86_64
             native-library: libtypst_kmp_jni.so
           - name: JVM (Windows)

@@ -23,19 +23,21 @@
 //! * A `(data, len)` pair must describe a readable region of `len` bytes, or be `(null, 0)`.
 //! * Out-parameters must either be null or point at writable storage of the right type.
 //! * A handle must not be freed while another thread is still using it. Concurrent *use* is fine;
-//!   the engine serialises access internally.
+//!   compilations run in parallel and every other call waits for exclusive access.
 #![allow(clippy::missing_safety_doc)]
 
 use std::ffi::{c_char, c_int, CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
-use std::sync::Mutex;
+use std::sync::RwLock;
 
 use typst_kmp_core::{CompileOutcome, TypstEngine};
 
 /// Opaque engine handle.
 pub struct TypstKmpEngine {
-    inner: Mutex<TypstEngine>,
+    /// Compilations only read the engine, so they share the lock and run in parallel; anything
+    /// that changes fonts or the VFS takes it exclusively.
+    inner: RwLock<TypstEngine>,
 }
 
 /// Opaque compilation result handle.
@@ -116,7 +118,7 @@ pub unsafe extern "C" fn typst_kmp_engine_new(
         };
         let engine = typst_kmp_core::engine_from_json(config)?;
         Ok(Box::into_raw(Box::new(TypstKmpEngine {
-            inner: Mutex::new(engine),
+            inner: RwLock::new(engine),
         })))
     })
 }
@@ -141,7 +143,7 @@ pub unsafe extern "C" fn typst_kmp_engine_add_font(
     guard(out_error, ERR, || {
         let engine = engine.as_ref().ok_or("engine must not be null")?;
         let bytes = as_slice(data, len).to_vec();
-        let mut locked = engine.inner.lock().map_err(|_| "engine lock poisoned")?;
+        let mut locked = engine.inner.write().map_err(|_| "engine lock poisoned")?;
         Ok(locked.add_font(bytes) as c_int)
     })
 }
@@ -159,7 +161,7 @@ pub unsafe extern "C" fn typst_kmp_engine_vfs_put(
         let engine = engine.as_ref().ok_or("engine must not be null")?;
         let path = as_str(path, "path")?;
         let bytes = as_slice(data, len).to_vec();
-        let mut locked = engine.inner.lock().map_err(|_| "engine lock poisoned")?;
+        let mut locked = engine.inner.write().map_err(|_| "engine lock poisoned")?;
         locked.vfs_put(path, bytes)?;
         Ok(OK)
     })
@@ -180,7 +182,7 @@ pub unsafe extern "C" fn typst_kmp_engine_vfs_put_package(
         let engine = engine.as_ref().ok_or("engine must not be null")?;
         let spec = as_str(spec, "spec")?;
         let archive = as_slice(data, len);
-        let mut locked = engine.inner.lock().map_err(|_| "engine lock poisoned")?;
+        let mut locked = engine.inner.write().map_err(|_| "engine lock poisoned")?;
         Ok(locked.vfs_put_package(spec, archive)? as c_int)
     })
 }
@@ -196,7 +198,7 @@ pub unsafe extern "C" fn typst_kmp_engine_vfs_remove(
     guard(out_error, ERR, || {
         let engine = engine.as_ref().ok_or("engine must not be null")?;
         let path = as_str(path, "path")?;
-        let mut locked = engine.inner.lock().map_err(|_| "engine lock poisoned")?;
+        let mut locked = engine.inner.write().map_err(|_| "engine lock poisoned")?;
         Ok(locked.vfs_remove(path)? as c_int)
     })
 }
@@ -209,7 +211,7 @@ pub unsafe extern "C" fn typst_kmp_engine_vfs_clear_files(
 ) -> c_int {
     guard(out_error, ERR, || {
         let engine = engine.as_ref().ok_or("engine must not be null")?;
-        let mut locked = engine.inner.lock().map_err(|_| "engine lock poisoned")?;
+        let mut locked = engine.inner.write().map_err(|_| "engine lock poisoned")?;
         Ok(locked.vfs_clear_files() as c_int)
     })
 }
@@ -222,8 +224,24 @@ pub unsafe extern "C" fn typst_kmp_engine_vfs_clear_packages(
 ) -> c_int {
     guard(out_error, ERR, || {
         let engine = engine.as_ref().ok_or("engine must not be null")?;
-        let mut locked = engine.inner.lock().map_err(|_| "engine lock poisoned")?;
+        let mut locked = engine.inner.write().map_err(|_| "engine lock poisoned")?;
         Ok(locked.vfs_clear_packages() as c_int)
+    })
+}
+
+/// What the engine holds, as a NUL-terminated UTF-8 JSON string. The caller releases it with
+/// [`typst_kmp_string_free`]. Returns null on failure.
+#[no_mangle]
+pub unsafe extern "C" fn typst_kmp_engine_inspect(
+    engine: *mut TypstKmpEngine,
+    out_error: *mut *mut c_char,
+) -> *mut c_char {
+    guard(out_error, ptr::null_mut(), || {
+        let engine = engine.as_ref().ok_or("engine must not be null")?;
+        let locked = engine.inner.read().map_err(|_| "engine lock poisoned")?;
+        let json = CString::new(typst_kmp_core::inspect_json(&locked))
+            .map_err(|_| "inspection JSON contained an interior NUL byte")?;
+        Ok(json.into_raw())
     })
 }
 
@@ -231,17 +249,39 @@ pub unsafe extern "C" fn typst_kmp_engine_vfs_clear_packages(
 
 /// Compiles a request. Returns null only on a hard failure; a failed *compilation* still yields a
 /// result whose JSON carries the diagnostics.
+///
+/// `files` and `file_lens` are parallel arrays of `file_count` entries holding the bytes of the
+/// request's `files`, in the order the JSON lists their paths. Both may be null when
+/// `file_count` is 0.
 #[no_mangle]
 pub unsafe extern "C" fn typst_kmp_compile(
     engine: *mut TypstKmpEngine,
     request_json: *const c_char,
+    files: *const *const u8,
+    file_lens: *const usize,
+    file_count: usize,
     out_error: *mut *mut c_char,
 ) -> *mut TypstKmpResult {
     guard(out_error, ptr::null_mut(), || {
         let engine = engine.as_ref().ok_or("engine must not be null")?;
         let request = as_str(request_json, "request_json")?;
-        let locked = engine.inner.lock().map_err(|_| "engine lock poisoned")?;
-        let CompileOutcome { response, blobs } = typst_kmp_core::compile_json(&locked, request)?;
+        let files = if file_count == 0 {
+            Vec::new()
+        } else {
+            if files.is_null() || file_lens.is_null() {
+                return Err("files and file_lens must not be null".to_string());
+            }
+            let pointers = std::slice::from_raw_parts(files, file_count);
+            let lengths = std::slice::from_raw_parts(file_lens, file_count);
+            pointers
+                .iter()
+                .zip(lengths)
+                .map(|(&data, &len)| as_slice(data, len).to_vec())
+                .collect()
+        };
+        let locked = engine.inner.read().map_err(|_| "engine lock poisoned")?;
+        let CompileOutcome { response, blobs } =
+            typst_kmp_core::compile_json(&locked, request, files)?;
         let json = CString::new(typst_kmp_core::response_json(&response))
             .map_err(|_| "response JSON contained an interior NUL byte")?;
         Ok(Box::into_raw(Box::new(TypstKmpResult { json, blobs })))
