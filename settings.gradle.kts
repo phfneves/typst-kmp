@@ -21,3 +21,4 @@ rootProject.name = "typst-kmp"
 
 include(":typst")
 include(":typst-android-native")
+include(":typst-universe")

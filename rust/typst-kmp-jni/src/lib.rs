@@ -12,7 +12,7 @@ use std::sync::RwLock;
 use jni::objects::{JByteArray, JObject, JObjectArray, JString};
 use jni::sys::{jboolean, jint, jlong, jobjectArray, JNI_FALSE, JNI_TRUE};
 use jni::JNIEnv;
-use typst_kmp_core::{CompileOutcome, TypstEngine};
+use typst_kmp_core::{CancelToken, CompileOutcome, TypstEngine};
 
 const EXCEPTION: &str = "io/github/phfneves/typst/TypstNativeException";
 
@@ -239,6 +239,7 @@ pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_compil
     handle: jlong,
     request_json: JString<'local>,
     files: JObjectArray<'local>,
+    cancel: jlong,
 ) -> jobjectArray {
     let null = JObject::null().into_raw();
     guard(&mut env, null, |env| {
@@ -247,7 +248,7 @@ pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_compil
         let engine = unsafe { engine(handle) }?;
         let locked = engine.read().map_err(|_| "engine lock poisoned")?;
         let CompileOutcome { response, blobs } =
-            typst_kmp_core::compile_json(&locked, &request, files)?;
+            typst_kmp_core::compile_json(&locked, &request, files, unsafe { token(cancel) })?;
         drop(locked);
 
         let json = env
@@ -281,6 +282,45 @@ pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_compil
 
         Ok(result.into_raw())
     })
+}
+
+/// Borrows a token produced by `cancelNew`; 0 means the compilation has none.
+///
+/// # Safety
+/// A non-zero value must come from `cancelNew` and must not have been freed.
+unsafe fn token<'a>(cancel: jlong) -> Option<&'a CancelToken> {
+    (cancel as *const CancelToken).as_ref()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_cancelNew<'local>(
+    _env: JNIEnv<'local>,
+    _this: JObject<'local>,
+) -> jlong {
+    Box::into_raw(Box::new(CancelToken::new())) as jlong
+}
+
+/// Sets a token. Touches nothing but an atomic, so it is safe from any thread at any time.
+#[no_mangle]
+pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_cancel<'local>(
+    _env: JNIEnv<'local>,
+    _this: JObject<'local>,
+    cancel: jlong,
+) {
+    if let Some(token) = unsafe { token(cancel) } {
+        token.cancel();
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_github_phfneves_typst_internal_TypstNative_cancelFree<'local>(
+    _env: JNIEnv<'local>,
+    _this: JObject<'local>,
+    cancel: jlong,
+) {
+    if cancel != 0 {
+        unsafe { drop(Box::from_raw(cancel as *mut CancelToken)) };
+    }
 }
 
 #[no_mangle]

@@ -11,14 +11,15 @@ use typst::layout::Abs;
 use typst::routines::SpanMode;
 use typst::syntax::package::PackageSpec;
 use typst::syntax::{DiagSpan, Span, SyntaxMode, VirtualRoot};
-use typst::text::{Font, FontBook};
-use typst::utils::LazyHash;
+use typst::text::Font;
 use typst::{Library, LibraryExt, World, WorldExt};
 use typst_layout::PagedDocument;
 use typst_pdf::{PdfOptions, PdfStandard, PdfStandards};
 use typst_render::RenderOptions;
 use typst_svg::SvgOptions;
 
+use crate::cancel::{self, CancelToken};
+use crate::fonts::Fonts;
 use crate::pkg;
 use crate::protocol::{
     CompileRequest, CompileResponse, Diagnostic, EngineConfig, FileEntry, FontFamily, Inspection,
@@ -37,31 +38,44 @@ pub struct CompileOutcome {
 const CACHE_MAX_AGE: usize = 10;
 
 pub struct TypstEngine {
-    fonts: Vec<Font>,
-    book: LazyHash<FontBook>,
+    fonts: Fonts,
     vfs: Vfs,
 }
 
 impl TypstEngine {
-    pub fn new(config: EngineConfig) -> Self {
-        let mut fonts = Vec::new();
+    /// Builds an engine. Fails only if one of [`EngineConfig::font_paths`] cannot be read.
+    pub fn new(config: EngineConfig) -> Result<Self, String> {
+        let mut fonts = Fonts::new();
         if config.embed_default_fonts {
-            fonts.extend(embedded_fonts());
+            fonts.add_loaded(embedded_fonts());
         }
-        let book = LazyHash::new(FontBook::from_fonts(fonts.iter()));
-        Self {
+        for path in &config.font_paths {
+            fonts.add_path(path)?;
+        }
+        if config.include_system_fonts {
+            fonts.add_system();
+        }
+        Ok(Self {
             fonts,
-            book,
             vfs: Vfs::new(),
-        }
+        })
     }
 
     /// Registers every face contained in a font file. Returns how many were added.
     pub fn add_font(&mut self, data: Vec<u8>) -> usize {
-        let before = self.fonts.len();
-        self.fonts.extend(Font::iter(Bytes::new(data)));
-        self.book = LazyHash::new(FontBook::from_fonts(self.fonts.iter()));
-        self.fonts.len() - before
+        self.fonts.add_loaded(Font::iter(Bytes::new(data)))
+    }
+
+    /// Indexes the font file or directory at `path`; its faces load when first used. Returns how
+    /// many faces were found.
+    pub fn add_font_path(&mut self, path: &str) -> Result<usize, String> {
+        self.fonts.add_path(path)
+    }
+
+    /// The engine's fonts, for tests that look at what has been loaded.
+    #[cfg(test)]
+    pub(crate) fn fonts(&self) -> &Fonts {
+        &self.fonts
     }
 
     pub fn vfs_put(&mut self, path: &str, bytes: Vec<u8>) -> Result<(), String> {
@@ -121,7 +135,8 @@ impl TypstEngine {
         let mut packages: Vec<String> = self.vfs.package_specs().map(str::to_string).collect();
         packages.sort();
         let mut fonts: Vec<FontFamily> = self
-            .book
+            .fonts
+            .book()
             .families()
             .map(|(name, faces)| FontFamily {
                 name: name.to_string(),
@@ -138,10 +153,14 @@ impl TypstEngine {
 
     /// Compiles `request`. `files` holds the bytes of [`CompileRequest::files`], in the same
     /// order; they are visible to this compilation only and never touch the engine's VFS.
+    ///
+    /// Setting `cancel` from another thread stops the compilation the next time it reaches for a
+    /// file, a font or the standard library, and it returns [`CANCELLED`](crate::cancel::CANCELLED).
     pub fn compile(
         &self,
         request: CompileRequest,
         files: Vec<Vec<u8>>,
+        cancel: Option<&CancelToken>,
     ) -> Result<CompileOutcome, String> {
         if request.files.len() != files.len() {
             return Err(format!(
@@ -154,7 +173,7 @@ impl TypstEngine {
         for (path, bytes) in request.files.iter().zip(files) {
             overlay.insert(parse_path(path)?, Bytes::new(bytes));
         }
-        let outcome = self.compile_uncached(request, &overlay);
+        let outcome = cancel::catch(|| self.compile_uncached(request, &overlay, cancel));
         // Typst memoises layout and evaluation in a process-wide cache that only shrinks when
         // asked to. Drop whatever went unused for a few compilations, as `typst watch` does, so
         // a long-lived engine does not grow without bound.
@@ -166,6 +185,7 @@ impl TypstEngine {
         &self,
         request: CompileRequest,
         overlay: &Vfs,
+        cancel: Option<&CancelToken>,
     ) -> Result<CompileOutcome, String> {
         let main = parse_path(&request.main)?;
         if !overlay.contains(main) && !self.vfs.contains(main) {
@@ -203,12 +223,12 @@ impl TypstEngine {
 
         let world = KmpWorld::new(
             library,
-            &self.book,
             &self.fonts,
             &self.vfs,
             overlay,
             main,
             today,
+            cancel,
         );
 
         let Warned { output, warnings } = typst::compile::<PagedDocument>(&world);
@@ -623,10 +643,11 @@ pub fn compile_json(
     engine: &TypstEngine,
     request_json: &str,
     files: Vec<Vec<u8>>,
+    cancel: Option<&CancelToken>,
 ) -> Result<CompileOutcome, String> {
     let request: CompileRequest = serde_json::from_str(request_json)
         .map_err(|err| format!("invalid compile request: {err}"))?;
-    engine.compile(request, files)
+    engine.compile(request, files, cancel)
 }
 
 /// Serializes a [`CompileResponse`] for transport.

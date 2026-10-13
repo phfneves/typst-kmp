@@ -10,13 +10,14 @@ use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Library, World};
 
+use crate::cancel::{self, CancelToken};
+use crate::fonts::Fonts;
 use crate::protocol::Missing;
 use crate::vfs::{format_path, Vfs};
 
 pub struct KmpWorld<'a> {
     library: LazyHash<Library>,
-    book: &'a LazyHash<FontBook>,
-    fonts: &'a [Font],
+    fonts: &'a Fonts,
     vfs: &'a Vfs,
     /// Files belonging to this compilation alone, consulted before [`Self::vfs`].
     overlay: &'a Vfs,
@@ -25,27 +26,29 @@ pub struct KmpWorld<'a> {
     /// Every lookup that failed, recorded structurally so the Kotlin resolution loop can act on
     /// it without having to parse human-readable diagnostic text.
     misses: Mutex<BTreeSet<Missing>>,
+    /// Checked on every call the compiler makes into the world; see [`crate::cancel`].
+    cancel: Option<&'a CancelToken>,
 }
 
 impl<'a> KmpWorld<'a> {
     pub fn new(
         library: Library,
-        book: &'a LazyHash<FontBook>,
-        fonts: &'a [Font],
+        fonts: &'a Fonts,
         vfs: &'a Vfs,
         overlay: &'a Vfs,
         main: FileId,
         today: Option<Datetime>,
+        cancel: Option<&'a CancelToken>,
     ) -> Self {
         Self {
             library: LazyHash::new(library),
-            book,
             fonts,
             vfs,
             overlay,
             main,
             today,
             misses: Mutex::new(BTreeSet::new()),
+            cancel,
         }
     }
 
@@ -94,27 +97,33 @@ impl<'a> KmpWorld<'a> {
 
 impl World for KmpWorld<'_> {
     fn library(&self) -> &LazyHash<Library> {
+        cancel::check(self.cancel);
         &self.library
     }
 
     fn book(&self) -> &LazyHash<FontBook> {
-        self.book
+        cancel::check(self.cancel);
+        self.fonts.book()
     }
 
     fn main(&self) -> FileId {
+        cancel::check(self.cancel);
         self.main
     }
 
     fn source(&self, id: FileId) -> FileResult<Source> {
+        cancel::check(self.cancel);
         self.recording(id, self.layer(id).source(id))
     }
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
+        cancel::check(self.cancel);
         self.recording(id, self.layer(id).file(id))
     }
 
     fn font(&self, index: usize) -> Option<Font> {
-        self.fonts.get(index).cloned()
+        cancel::check(self.cancel);
+        self.fonts.slots().get(index)?.get()
     }
 
     fn today(&self, _offset: Option<Duration>) -> Option<Datetime> {

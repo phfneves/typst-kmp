@@ -143,7 +143,8 @@ impl TypstKmpEngine {
         }
         let engine = self.inner.try_borrow().map_err(error_reentrant)?;
         let CompileOutcome { response, blobs } =
-            typst_kmp_core::compile_json(&engine, request_json, split).map_err(error)?;
+            // No token: WebAssembly cannot unwind, so a compilation here cannot be interrupted.
+            typst_kmp_core::compile_json(&engine, request_json, split, None).map_err(error)?;
         Ok(TypstKmpResult {
             json: typst_kmp_core::response_json(&response),
             blobs,
