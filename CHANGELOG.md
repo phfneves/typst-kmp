@@ -5,11 +5,11 @@ can move text by a pixel, and pixel-compared goldens have to be regenerated with
 
 | typst-kmp | Typst | Released |
 | --- | --- | --- |
-| unreleased | 0.15 | — |
+| 0.1.0-alpha03 | 0.15 | 2026-10-13 |
 | 0.1.0-alpha02 | 0.15 | 2026-10-08 |
 | 0.1.0-alpha01 | 0.15 | 2026-09-03 |
 
-## Unreleased
+## 0.1.0-alpha03 — 2026-10-13
 
 ### Breaking
 

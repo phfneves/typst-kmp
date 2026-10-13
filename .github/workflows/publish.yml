@@ -222,6 +222,18 @@ jobs:
             }
             echo "ok: $target ($(du -h "$base.klib" | cut -f1))"
           done
+      # typst-kmp-universe has no native code of its own, so there is no cinterop to check; what
+      # can go missing is a whole platform, if a target was left out of its build script.
+      - name: Verify typst-kmp-universe is packaged
+        run: |
+          repo="$HOME/.m2/repository/io/github/phfneves"
+          for suffix in "" -jvm -android -js -wasm-js -iosarm64 -iossimulatorarm64 -iosx64 \
+                        -macosarm64 -macosx64 -linuxx64 -linuxarm64 -mingwx64; do
+            artifact="typst-kmp-universe$suffix"
+            dir="$repo/$artifact/$TYPST_VERSION"
+            [ -f "$dir/$artifact-$TYPST_VERSION.module" ] || { echo "$artifact was not published"; exit 1; }
+            echo "ok: $artifact"
+          done
       - name: Publish
         run: >
           ./gradlew publishToMavenCentral

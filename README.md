@@ -4,7 +4,7 @@ The [Typst](https://typst.app) typesetting compiler as a Kotlin Multiplatform li
 binary to install, no subprocess, no server round-trip. The compiler is embedded and runs in
 process on Android, the JVM, iOS, macOS, Linux, Windows and in the browser.
 
-> **Status: alpha.** The current release is `0.1.0-alpha02`, embedding Typst 0.15; the API may still
+> **Status: alpha.** The current release is `0.1.0-alpha03`, embedding Typst 0.15; the API may still
 > change. [CHANGELOG.md](CHANGELOG.md) lists what changed in each release and which Typst version
 > it embeds.
 > The same 13-test `commonTest` suite runs green on the JVM (JNI), on Kotlin/Native (cinterop),
@@ -47,7 +47,7 @@ published coordinates — so it doubles as a worked example of the installation 
 
 ## Installation
 
-Published on Maven Central. The examples below pin `0.1.0-alpha02`; check
+Published on Maven Central. The examples below pin `0.1.0-alpha03`; check
 [Releases](https://github.com/phfneves/typst-kmp/releases) for the current version.
 
 ```kotlin
@@ -64,11 +64,11 @@ native jar is always one explicit extra line — nothing infers it for you.
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.phfneves:typst-kmp:0.1.0-alpha02")
+            implementation("io.github.phfneves:typst-kmp:0.1.0-alpha03")
         }
         jvmMain.dependencies {
             // Pick the classifier matching where the JVM will run.
-            runtimeOnly("io.github.phfneves:typst-kmp-jvm:0.1.0-alpha02:linux-x86_64")
+            runtimeOnly("io.github.phfneves:typst-kmp-jvm:0.1.0-alpha03:linux-x86_64")
         }
     }
 }
@@ -77,8 +77,8 @@ kotlin {
 ```kotlin
 // Plain JVM
 dependencies {
-    implementation("io.github.phfneves:typst-kmp-jvm:0.1.0-alpha02")
-    runtimeOnly("io.github.phfneves:typst-kmp-jvm:0.1.0-alpha02:linux-x86_64")
+    implementation("io.github.phfneves:typst-kmp-jvm:0.1.0-alpha03")
+    runtimeOnly("io.github.phfneves:typst-kmp-jvm:0.1.0-alpha03:linux-x86_64")
 }
 ```
 
@@ -87,12 +87,12 @@ dependencies {
 <dependency>
   <groupId>io.github.phfneves</groupId>
   <artifactId>typst-kmp-jvm</artifactId>
-  <version>0.1.0-alpha02</version>
+  <version>0.1.0-alpha03</version>
 </dependency>
 <dependency>
   <groupId>io.github.phfneves</groupId>
   <artifactId>typst-kmp-jvm</artifactId>
-  <version>0.1.0-alpha02</version>
+  <version>0.1.0-alpha03</version>
   <classifier>linux-x86_64</classifier>
   <scope>runtime</scope>
 </dependency>
@@ -161,7 +161,7 @@ one. Unzip it into your distribution at `typst-kmp/`, which is where the engine 
 // Gradle: unpack the module into the browser distribution.
 val typstWebAssets by configurations.creating
 dependencies {
-    typstWebAssets("io.github.phfneves:typst-kmp-js:0.1.0-alpha02:webassets@zip")
+    typstWebAssets("io.github.phfneves:typst-kmp-js:0.1.0-alpha03:webassets@zip")
 }
 val unpackTypst by tasks.registering(Copy::class) {
     from(typstWebAssets.map { zipTree(it) })
@@ -560,7 +560,7 @@ Released Windows artifacts are built on CI, whose toolchain hosts MSVC.
 CI runs only for a release: nothing builds on a push or a pull request. Publishing a GitHub release
 starts the `Publish` workflow, which runs the full test suite (`Build`) as a gate, builds the native
 libraries for every platform, and uploads the result to Maven Central. The version comes from the
-tag, minus its leading `v`, so `v0.1.0-alpha02` publishes `0.1.0-alpha02`.
+tag, minus its leading `v`, so `v0.1.0-alpha03` publishes `0.1.0-alpha03`.
 
 1. **Make sure `main` holds what you want to ship.** The release is built from the commit the tag
    points at, so merge everything first and pull:
@@ -573,8 +573,8 @@ tag, minus its leading `v`, so `v0.1.0-alpha02` publishes `0.1.0-alpha02`.
 2. **Create the tag and push it.** Use an annotated tag named `v<version>`:
 
    ```bash
-   git tag -a v0.1.0-alpha02 -m "v0.1.0-alpha02"
-   git push origin v0.1.0-alpha02
+   git tag -a v0.1.0-alpha03 -m "v0.1.0-alpha03"
+   git push origin v0.1.0-alpha03
    ```
 
    Pushing the tag on its own triggers nothing.
@@ -588,13 +588,13 @@ tag, minus its leading `v`, so `v0.1.0-alpha02` publishes `0.1.0-alpha02`.
    The same thing from the command line:
 
    ```bash
-   gh release create v0.1.0-alpha02 --verify-tag --draft --generate-notes --prerelease
+   gh release create v0.1.0-alpha03 --verify-tag --draft --generate-notes --prerelease
    ```
 
    A draft triggers nothing either, so you can review the notes at leisure.
 
 4. **Publish the draft.** Open the draft and click **Publish release**, or run
-   `gh release edit v0.1.0-alpha02 --draft=false`. This is the step that starts the `Publish`
+   `gh release edit v0.1.0-alpha03 --draft=false`. This is the step that starts the `Publish`
    workflow; follow it in the [Actions](https://github.com/phfneves/typst-kmp/actions) tab. If any
    test or any platform's build fails, nothing reaches Maven Central.
 
