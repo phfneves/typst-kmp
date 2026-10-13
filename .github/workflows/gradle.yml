@@ -53,15 +53,11 @@ jobs:
           # naming bug would hide, so it runs there as well.
           # `artifact` is the job name as an upload-artifact name: that API rejects a slash, and
           # expressions have no replace() to derive one from `name`.
-          # checkKotlinAbi compiles every Kotlin/Native klib this host can build, and on Linux that
-          # includes linuxArm64, whose cinterop links the cabi archive for aarch64: hence the second
-          # Rust target and the cross compiler below. The other targets only need the header.
           - name: JVM (Linux)
             artifact: jvm-linux
             os: ubuntu-latest
-            rust-targets: x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu
-            cross-aarch64: true
-            tasks: :typst:jvmTest :typst:jvmJarTest :typst:jvmNativeJars :typst:checkKotlinAbi :typst-universe:jvmTest :typst-universe:checkKotlinAbi
+            rust-targets: x86_64-unknown-linux-gnu
+            tasks: :typst:jvmTest :typst:jvmJarTest :typst:jvmNativeJars :typst-universe:jvmTest
             native-classifier: linux-x86_64
             native-library: libtypst_kmp_jni.so
           - name: JVM (Windows)
@@ -84,11 +80,15 @@ jobs:
             os: windows-latest
             rust-targets: x86_64-pc-windows-gnu
             tasks: :typst:mingwX64Test
+          # The ABI check runs here because only a macOS host can compile every klib: elsewhere the
+          # Apple targets drop out of the dump, and it no longer matches the one checked in. It needs
+          # the cabi archive of each Apple target, hence the three Rust targets the tests alone
+          # would not; the Linux and Windows klibs only need the header.
           - name: Kotlin/Native (Apple)
             artifact: native-apple
             os: macos-latest
-            rust-targets: aarch64-apple-darwin,aarch64-apple-ios-sim
-            tasks: :typst:macosArm64Test :typst:iosSimulatorArm64Test :typst-universe:macosArm64Test
+            rust-targets: aarch64-apple-darwin,aarch64-apple-ios-sim,x86_64-apple-darwin,aarch64-apple-ios,x86_64-apple-ios
+            tasks: :typst:macosArm64Test :typst:iosSimulatorArm64Test :typst-universe:macosArm64Test :typst:checkKotlinAbi :typst-universe:checkKotlinAbi
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -97,14 +97,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
-      # Some crates in the tree build C or assembly through the `cc` crate, which needs a C
-      # compiler for the target; publish.yml installs the same one for its aarch64 build.
-      - name: Install the aarch64 cross compiler
-        if: matrix.cross-aarch64
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
